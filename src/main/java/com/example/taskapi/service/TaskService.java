@@ -15,7 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
-
+import com.example.taskapi.dto.TaskPatchRequest;
 import java.util.Set;
 
 @Service
@@ -125,23 +125,23 @@ public class TaskService {
         return toResponse(updatedTask);
     }
 
-    public TaskResponse patchTask(Long id, TaskRequest request) {
+    public TaskResponse patchTask(Long id, TaskPatchRequest request) {
 
         Task task = taskRepository.findById(id)
                 .orElseThrow(() -> new TaskNotFoundException(
                         "Task not found with id: " + id
                 ));
 
-        if (request.getTitle() != null) {
-            task.setTitle(request.getTitle());
+        if (request.title() != null) {
+            task.setTitle(request.title());
         }
 
-        if (request.getDescription() != null) {
-            task.setDescription(request.getDescription());
+        if (request.description() != null) {
+            task.setDescription(request.description());
         }
 
-        if (request.getStatus() != null) {
-            task.setStatus(request.getStatus());
+        if (request.status() != null) {
+            task.setStatus(request.status());
         }
 
         Task updatedTask = taskRepository.save(task);

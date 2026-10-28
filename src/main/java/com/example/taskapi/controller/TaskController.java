@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import com.example.taskapi.model.TaskStatus;
 import com.example.taskapi.dto.PageResponse;
+import com.example.taskapi.dto.TaskPatchRequest;
 
 @RestController
 @RequestMapping("/tasks")
@@ -53,7 +54,7 @@ public class TaskController {
     @PatchMapping("/{id}")
     public TaskResponse patchTask(
             @PathVariable Long id,
-            @RequestBody TaskRequest request) {
+            @Valid @RequestBody TaskPatchRequest request) {
 
         return taskService.patchTask(id, request);
     }
