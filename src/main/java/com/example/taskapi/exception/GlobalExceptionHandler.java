@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -130,17 +131,29 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @Schema(description = "Error body for every error except request body validation failures")
     public record ErrorResponse(
+            @Schema(description = "HTTP status code", example = "404")
             int status,
+            @Schema(description = "What went wrong", example = "Task not found with id: 42")
             String message,
+            @Schema(description = "When the error occurred. Local date-time in Asia/Kolkata, without a UTC offset",
+                    example = "2026-11-04T17:01:34.431")
             LocalDateTime timestamp
     ) {
     }
 
+    @Schema(description = "Error body when request body validation fails (400)")
     public record ValidationErrorResponse(
+            @Schema(description = "HTTP status code", example = "400")
             int status,
+            @Schema(description = "Always \"Validation failed\"", example = "Validation failed")
             String message,
+            @Schema(description = "Each invalid field mapped to its validation message",
+                    example = "{\"title\": \"Title is required\"}")
             Map<String, String> errors,
+            @Schema(description = "When the error occurred. Local date-time in Asia/Kolkata, without a UTC offset",
+                    example = "2026-11-04T17:01:34.886")
             LocalDateTime timestamp
     ) {
     }
