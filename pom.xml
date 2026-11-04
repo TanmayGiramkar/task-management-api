@@ -70,9 +70,21 @@
 
 	<build>
 		<plugins>
+			<!-- Java on Windows reports IST as "Asia/Calcutta", which PostgreSQL 17 rejects on connect.
+			     Pin "Asia/Kolkata" for the JVMs Maven forks, matching the IntelliJ run config. -->
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<jvmArguments>-Duser.timezone=Asia/Kolkata</jvmArguments>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-Duser.timezone=Asia/Kolkata</argLine>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
