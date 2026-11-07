@@ -11,13 +11,14 @@ It supports create, read, replace, partial update and delete, plus filtering, se
 | Framework | Spring Boot 4.1.1 (Spring MVC, Spring Data JPA, Bean Validation) |
 | Database | PostgreSQL 17, schema managed by Flyway |
 | API docs | springdoc-openapi (OpenAPI 3.1 + Swagger UI) |
+| Testing | JUnit 5, Mockito, Spring MVC test slices, Testcontainers (PostgreSQL), JaCoCo |
 | Build | Maven, through the wrapper (`mvnw` / `mvnw.cmd`) |
 
 ## Prerequisites
 
 - JDK 21
-- Docker, with a PostgreSQL 17 container on port 5432 and a database named `taskdb`.
-  To create one (choose your own username and password):
+- Docker. The tests start their own PostgreSQL container. To run the app you also need a PostgreSQL 17
+  container on port 5432 with a database named `taskdb`. To create one (choose your own username and password):
 
   ```bash
   docker run --name task-postgres -e POSTGRES_USER=<username> -e POSTGRES_PASSWORD=<password> -e POSTGRES_DB=taskdb -p 5432:5432 -d postgres:17
@@ -48,11 +49,39 @@ Flyway applies any pending migrations from `src/main/resources/db/migration` at 
 
 ## Test
 
-```bash
-./mvnw verify
-```
+| Command | Runs | Needs |
+|---|---|---|
+| `./mvnw test` | Unit and web-layer tests (`*Test`) | JDK only |
+| `./mvnw clean verify` | All tests, including integration tests (`*IT`), plus the coverage report | Docker running |
 
-The tests currently load the full application, so the PostgreSQL container must be running.
+On Windows PowerShell use `mvnw.cmd` instead of `./mvnw`.
+
+Integration tests start a throwaway PostgreSQL 17 container with Testcontainers and build the schema with
+Flyway from V1. They never touch the local `task-postgres` database and do not need `.env`.
+The first run downloads the `postgres:17` and `testcontainers/ryuk` images.
+
+Coverage report (from both test phases): `target/site/jacoco/index.html`.
+
+| Layer | Example class | What it checks |
+|---|---|---|
+| Unit | `TaskServiceTest` | Service rules with a mocked repository |
+| Web | `TaskControllerTest` | Status codes, JSON, validation messages, error responses |
+| JPA | `TaskSpecificationsIT` | Filtering and search SQL on real PostgreSQL |
+| End to end | `TaskApiIT`, `FlywayMigrationIT` | Full request path with real commits; migrations on an empty database |
+
+See [ADR 0002](docs/adr/0002-test-strategy-with-testcontainers.md) for the reasoning.
+
+### Running tests in IntelliJ IDEA
+
+Maven passes `-Duser.timezone=Asia/Kolkata` to the test JVMs. IntelliJ's own JUnit runner may not, and on
+Windows Java then reports the zone as `Asia/Calcutta`, which PostgreSQL 17 rejects when connecting.
+Add the option once to the JUnit template:
+
+1. **Run → Edit Configurations… → Edit configuration templates… → JUnit**
+2. In **VM options**, add `-Duser.timezone=Asia/Kolkata` (if the field is hidden: **Modify options → Add VM options**)
+3. Delete any JUnit run configurations created before this change, so they are recreated from the template.
+
+Integration tests also need Docker Desktop to be running.
 
 ## API documentation
 
