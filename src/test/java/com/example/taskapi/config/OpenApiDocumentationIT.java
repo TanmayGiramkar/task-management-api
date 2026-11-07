@@ -1,9 +1,11 @@
 package com.example.taskapi.config;
 
+import com.example.taskapi.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -19,12 +21,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Checks the generated OpenAPI document and Swagger UI.
- * Like TaskapiApplicationTests, this loads the full application and needs the local database
- * until Stage 3 moves the tests onto Testcontainers.
+ * Loads the full application, so it runs against PostgreSQL in Testcontainers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-class OpenApiDocumentationTests {
+@Import(TestcontainersConfiguration.class)
+class OpenApiDocumentationIT {
 
     private static final String API_DOCS = "/v3/api-docs";
     private static final String JSON = "content['application/json']";
