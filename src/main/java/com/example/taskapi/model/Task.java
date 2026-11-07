@@ -3,6 +3,7 @@ package com.example.taskapi.model;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 @Entity
 @Table(name = "tasks")
@@ -39,7 +40,7 @@ public class Task {
 
     @PrePersist
     protected void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = currentTime();
         createdAt = now;
         updatedAt = now;
 
@@ -50,7 +51,16 @@ public class Task {
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = currentTime();
+    }
+
+    /**
+     * The columns are TIMESTAMP(6), so PostgreSQL keeps microseconds. The JVM clock can be finer
+     * (100 ns on Windows, nanoseconds on Linux), and the create/update response is built from this
+     * object, not re-read from the database. Truncating here makes the response match what is stored.
+     */
+    private static LocalDateTime currentTime() {
+        return LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     public Long getId() {
