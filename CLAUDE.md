@@ -92,8 +92,6 @@ Validation errors add `"errors": { "field": "message" }` with `"message": "Valid
 Constructor injection only. Controllers stay thin; logic lives in services.
 
 ### Known gaps
-- The only test, `TaskapiApplicationTests.contextLoads`, needs a live database. Replace or back it
-  with Testcontainers in Stage 3 so the build runs anywhere (Jenkins included).
 - `spring.jpa.show-sql=true` should move to a dev-only profile.
 - `%` and `_` in `search` act as LIKE wildcards (bound parameters, so not injection). Optional fix.
 
