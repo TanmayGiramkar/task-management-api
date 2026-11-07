@@ -57,6 +57,7 @@ learns from it, and must be able to explain every decision in an interview.** So
 7. **No new dependency without a one-line justification** in your summary. Let the Spring Boot
    parent manage versions wherever it can.
 8. If something is ambiguous or could destroy data, **stop and ask**.
+9. Commits and PRs must not contain Co-Authored-By trailers or 'Generated with Claude Code' lines.
 
 ## 4. Current state (verified)
 
