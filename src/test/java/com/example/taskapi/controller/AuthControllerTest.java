@@ -10,6 +10,8 @@ import com.example.taskapi.exception.FieldValidationException;
 import com.example.taskapi.exception.InvalidRefreshTokenException;
 import com.example.taskapi.security.SecurityConfig;
 import com.example.taskapi.service.AuthService;
+import com.example.taskapi.support.TestClientIp;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +22,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.LocalDateTime;
 
@@ -48,8 +51,16 @@ class AuthControllerTest {
     @MockitoBean
     private AuthService authService;
 
+    /** Each test calls from its own IP, so the per-IP rate limits never carry over between tests. */
+    private RequestPostProcessor clientIp;
+
+    @BeforeEach
+    void useAFreshClientIp() {
+        clientIp = TestClientIp.uniqueClientIp();
+    }
+
     private ResultActions postJson(String path, String json) throws Exception {
-        return mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(json));
+        return mockMvc.perform(post(path).with(clientIp).contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
     @Nested

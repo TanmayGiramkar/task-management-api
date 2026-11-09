@@ -14,6 +14,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
@@ -30,7 +31,7 @@ import java.util.Base64;
  * automatically, and this API does not use cookies.
  */
 @Configuration
-@EnableConfigurationProperties({JwtProperties.class, RefreshTokenProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, RefreshTokenProperties.class, RateLimitProperties.class})
 public class SecurityConfig {
 
     /** HS256 needs a key at least as long as its 256-bit output. */
@@ -45,12 +46,17 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
+            RateLimitProperties rateLimitProperties,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) throws Exception {
 
         var authenticationEntryPoint = new ProblemDetailsAuthenticationEntryPoint(exceptionResolver);
         var accessDeniedHandler = new ProblemDetailsAccessDeniedHandler(exceptionResolver);
 
         http
+                // Created here rather than as a bean: a Filter bean would also be registered by Spring Boot
+                // as a plain servlet filter, so it would run twice
+                .addFilterBefore(new AuthRateLimitFilter(rateLimitProperties, exceptionResolver),
+                        BearerTokenAuthenticationFilter.class)
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth

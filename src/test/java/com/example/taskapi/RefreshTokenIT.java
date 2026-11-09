@@ -4,6 +4,7 @@ import com.example.taskapi.repository.RefreshTokenRepository;
 import com.example.taskapi.repository.TaskRepository;
 import com.example.taskapi.repository.UserRepository;
 import com.example.taskapi.service.RefreshTokenService;
+import com.example.taskapi.support.TestClientIp;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,17 +59,21 @@ class RefreshTokenIT {
     @Autowired
     private RefreshTokenService refreshTokenService;
 
+    /** Each test calls from its own IP, so the per-IP rate limits never carry over between tests. */
+    private RequestPostProcessor clientIp;
+
     @BeforeEach
     void startWithOneUser() throws Exception {
         // Throwaway Testcontainers database only. Deleting users also deletes their refresh tokens (ON DELETE CASCADE)
         taskRepository.deleteAll();
         userRepository.deleteAll();
+        clientIp = TestClientIp.uniqueClientIp();
         postJson("/auth/register", "{\"email\": \"tanmay@example.com\", \"password\": \"" + PASSWORD + "\"}")
                 .andExpect(status().isCreated());
     }
 
     private ResultActions postJson(String path, String json) throws Exception {
-        return mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(json));
+        return mockMvc.perform(post(path).with(clientIp).contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
     /** Logs in and returns the response body (access and refresh token). */

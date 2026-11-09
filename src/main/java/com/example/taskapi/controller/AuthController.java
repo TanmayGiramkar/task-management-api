@@ -8,6 +8,7 @@ import com.example.taskapi.dto.TokenResponse;
 import com.example.taskapi.dto.UserResponse;
 import com.example.taskapi.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -34,6 +35,9 @@ import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON_VALUE;
                 examples = @ExampleObject(value = OpenApiExamples.INTERNAL_ERROR)))
 public class AuthController {
 
+    private static final String TOO_MANY_REQUESTS_DESCRIPTION =
+            "Too many requests from this client. Limits per IP: login 5/min, register 3/min, refresh 10/min";
+
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
@@ -51,6 +55,10 @@ public class AuthController {
     @ApiResponse(responseCode = "409", description = "An account with this email already exists",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.EMAIL_TAKEN)))
+    @ApiResponse(responseCode = "429", description = TOO_MANY_REQUESTS_DESCRIPTION,
+            headers = @Header(name = "Retry-After", description = "Seconds to wait", schema = @Schema(type = "integer")),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
+                    examples = @ExampleObject(value = OpenApiExamples.TOO_MANY_REQUESTS)))
     public UserResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
     }
@@ -67,6 +75,10 @@ public class AuthController {
     @ApiResponse(responseCode = "401", description = "Wrong email or password (the response does not say which)",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.INVALID_CREDENTIALS)))
+    @ApiResponse(responseCode = "429", description = TOO_MANY_REQUESTS_DESCRIPTION,
+            headers = @Header(name = "Retry-After", description = "Seconds to wait", schema = @Schema(type = "integer")),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
+                    examples = @ExampleObject(value = OpenApiExamples.TOO_MANY_REQUESTS)))
     public TokenResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
@@ -84,6 +96,10 @@ public class AuthController {
     @ApiResponse(responseCode = "401", description = "Refresh token unknown, expired or revoked",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.INVALID_REFRESH_TOKEN)))
+    @ApiResponse(responseCode = "429", description = TOO_MANY_REQUESTS_DESCRIPTION,
+            headers = @Header(name = "Retry-After", description = "Seconds to wait", schema = @Schema(type = "integer")),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
+                    examples = @ExampleObject(value = OpenApiExamples.TOO_MANY_REQUESTS)))
     public TokenResponse refresh(@Valid @RequestBody RefreshTokenRequest request) {
         return authService.refresh(request);
     }

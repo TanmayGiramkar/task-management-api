@@ -107,6 +107,16 @@ public final class OpenApiExamples {
             }
             """;
 
+    public static final String TOO_MANY_REQUESTS = """
+            {
+              "title": "Too Many Requests",
+              "status": 429,
+              "detail": "Too many requests. Try again in 12 seconds",
+              "instance": "/auth/login",
+              "timestamp": "2026-11-09T14:05:12.886"
+            }
+            """;
+
     public static final String UNAUTHORIZED = """
             {
               "title": "Unauthorized",

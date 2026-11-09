@@ -57,6 +57,7 @@ public class OpenApiConfig {
             | 401 | Missing, invalid or expired access token, or wrong email or password on login |
             | 404 | No task with the given id, or no endpoint for the requested path |
             | 409 | Registering an email that already has an account |
+            | 429 | Too many login, register or refresh requests from one client. Wait for `Retry-After` seconds |
             | 405 | The HTTP method is not supported for the path, for example `PUT /tasks` |
             | 500 | Unexpected server error. Details are logged on the server and never returned |
 

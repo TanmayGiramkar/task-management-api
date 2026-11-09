@@ -3,6 +3,7 @@ package com.example.taskapi;
 import com.example.taskapi.repository.TaskRepository;
 import com.example.taskapi.repository.UserRepository;
 import com.example.taskapi.security.JwtProperties;
+import com.example.taskapi.support.TestClientIp;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
@@ -64,20 +66,24 @@ class AuthenticationIT {
     @Autowired
     private JwtProperties jwtProperties;
 
+    /** Each test calls from its own IP, so the per-IP rate limits never carry over between tests. */
+    private RequestPostProcessor clientIp;
+
     @BeforeEach
     void startWithNoUsers() {
         // Throwaway Testcontainers database only
         taskRepository.deleteAll();
         userRepository.deleteAll();
+        clientIp = TestClientIp.uniqueClientIp();
     }
 
     private ResultActions register(String email, String password) throws Exception {
-        return mockMvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON)
+        return mockMvc.perform(post("/auth/register").with(clientIp).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\": \"" + email + "\", \"password\": \"" + password + "\"}"));
     }
 
     private ResultActions login(String email, String password) throws Exception {
-        return mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+        return mockMvc.perform(post("/auth/login").with(clientIp).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\": \"" + email + "\", \"password\": \"" + password + "\"}"));
     }
 

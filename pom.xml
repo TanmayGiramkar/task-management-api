@@ -18,6 +18,7 @@
 		<java.version>21</java.version>
 		<springdoc.version>3.2.0</springdoc.version>
 		<!-- Not managed by the Spring Boot parent, so pinned here -->
+		<bucket4j.version>8.21.0</bucket4j.version>
 		<jacoco.version>0.8.16</jacoco.version>
 		<!-- Empty default so "@{argLine}" in the test plugins still resolves when JaCoCo is skipped -->
 		<argLine></argLine>
@@ -42,6 +43,17 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+		</dependency>
+		<!-- Token-bucket rate limiting for the auth endpoints (ADR 0004) -->
+		<dependency>
+			<groupId>com.bucket4j</groupId>
+			<artifactId>bucket4j_jdk17-core</artifactId>
+			<version>${bucket4j.version}</version>
+		</dependency>
+		<!-- Bounded, expiring in-memory store for the per-client rate-limit buckets -->
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
 		</dependency>
 
 		<dependency>

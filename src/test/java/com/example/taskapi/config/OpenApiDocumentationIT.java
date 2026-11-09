@@ -75,6 +75,10 @@ class OpenApiDocumentationIT {
                 .andExpect(jsonPath("$.paths['/auth/refresh'].post.responses['401']").exists())
                 .andExpect(jsonPath("$.paths['/auth/logout'].post.responses['204']").exists())
                 .andExpect(jsonPath("$.paths['/auth/logout'].post.responses['401']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/auth/login'].post.responses['429'].headers['Retry-After']").exists())
+                .andExpect(jsonPath("$.paths['/auth/register'].post.responses['429']").exists())
+                .andExpect(jsonPath("$.paths['/auth/refresh'].post.responses['429']").exists())
+                .andExpect(jsonPath("$.paths['/auth/logout'].post.responses['429']").doesNotExist())
                 // 6 task operations + 4 auth operations
                 .andExpect(jsonPath("$.paths.*.*.responses['500']", hasSize(10)))
                 .andExpect(jsonPath("$.paths.*.*.responses['405']").doesNotExist());

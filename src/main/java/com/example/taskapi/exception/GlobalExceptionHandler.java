@@ -2,8 +2,10 @@ package com.example.taskapi.exception;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -81,6 +83,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidRefreshTokenException.class)
     public ProblemDetail handleInvalidRefreshToken(InvalidRefreshTokenException exception) {
         return problem(HttpStatus.UNAUTHORIZED, exception.getMessage());
+    }
+
+    /** 429 from AuthRateLimitFilter. Retry-After tells the client how many seconds to wait. */
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ProblemDetail> handleRateLimitExceeded(RateLimitExceededException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(exception.getRetryAfterSeconds()))
+                .body(problem(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage()));
     }
 
     /** 403, through ProblemDetailsAccessDeniedHandler or method security. */
