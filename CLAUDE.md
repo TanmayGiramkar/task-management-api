@@ -78,6 +78,24 @@ learns from it, and must be able to explain every decision in an interview.** So
 - **Flyway** owns the schema. `V1__create_tasks_table.sql` (local DB was *baselined* at V1, so V1 never
   ran there), `V2__fix_task_column_lengths.sql` (title 100, description 500).
   `spring.jpa.hibernate.ddl-auto=validate`. **The next migration is V3.**
+- `Task` timestamps are truncated to microseconds to match the `TIMESTAMP(6)` columns, so create/update
+  responses equal what later reads return
+- **Stage 2 — OpenAPI** (ADR 0001): springdoc-openapi 3.2.0 (pinned). Swagger UI at `/swagger-ui.html`,
+  JSON at `/v3/api-docs`. Annotations on `TaskController`; each operation declares only the errors it can
+  return (`springdoc.override-with-generic-response=false`); example error bodies in `OpenApiExamples`
+- **Stage 3 — Testing** (ADR 0002), 96 tests:
+  - `*Test` = unit and web-slice tests, run by **surefire** (`mvnw.cmd test`, no Docker):
+    `TaskServiceTest` (Mockito), `TaskControllerTest` (`@WebMvcTest` + `@MockitoBean`)
+  - `*IT` = integration tests, run by **failsafe** in `mvnw.cmd verify` (needs Docker):
+    `TaskSpecificationsIT` (`@DataJpaTest`), `TaskApiIT`, `FlywayMigrationIT`, `OpenApiDocumentationIT`,
+    `TaskapiApplicationIT`
+  - **Testcontainers**: `TestcontainersConfiguration` (`@Bean @ServiceConnection` `postgres:17`), imported
+    with `@Import`. Tests never use `task-postgres` or `.env`. API tests are not `@Transactional` (real
+    commits); they clean up with `deleteAll()` in the container only
+  - **JaCoCo** 0.8.16 (pinned): one agent for both phases via `@{argLine}`, report at
+    `target/site/jacoco/index.html` (use `clean verify`). No coverage gate yet (Stage 8)
+  - Surefire and failsafe `argLine` = `@{argLine} -javaagent:<mockito> -Duser.timezone=Asia/Kolkata`.
+    IntelliJ JUnit runs need the VM option `-Duser.timezone=Asia/Kolkata` (see README)
 - Git + GitHub (`TanmayGiramkar/task-management-api`), `.gitignore` covers `.env`, `target/`,
   `target_test-classes/`, `*.log`
 
@@ -88,7 +106,7 @@ learns from it, and must be able to explain every decision in an interview.** So
 Validation errors add `"errors": { "field": "message" }` with `"message": "Validation failed"`.
 
 ### Package layout (`com.example.taskapi`)
-`controller`, `dto`, `exception`, `model`, `repository`, `service`, `specification`.
+`config`, `controller`, `dto`, `exception`, `model`, `repository`, `service`, `specification`.
 Constructor injection only. Controllers stay thin; logic lives in services.
 
 ### Known gaps
@@ -105,7 +123,7 @@ Work **one stage at a time**, in this order. Each item below is also an acceptan
 | 2. Swagger | springdoc-openapi; document endpoints, params, schemas and error responses |
 | 3. Testing | JUnit 5 + Mockito service tests, `@WebMvcTest` controller tests, Testcontainers integration tests on real PostgreSQL, JaCoCo report |
 | 4. Security | `users` table via Flyway; BCrypt; JWT access tokens + refresh-token rotation and revocation; each user sees only their own tasks (return 404, not 403, for others' resources); security tests for cross-user access; rate limiting on auth endpoints |
-| 5. Domain | Teams, projects, members, roles; relationships; detect and fix N+1 queries (fetch joins / entity graphs); optimistic locking with `@Version` → 409; idempotency keys on POST |
+| 5. Domain | Teams, projects, members; **role-based authorization with team roles (owner / admin / member)** — Stage 4 deliberately has no roles, only per-user ownership; relationships; detect and fix N+1 queries (fetch joins / entity graphs); optimistic locking with `@Version` → 409; idempotency keys on POST |
 | 6. Performance | Redis caching with explicit invalidation; indexes justified with `EXPLAIN ANALYZE`; k6 load tests with recorded before/after numbers |
 | 7. Docker | Multi-stage, non-root image; Docker Compose for app + PostgreSQL + Redis with health checks, named volumes and `.env` |
 | 8. Jenkins + Cloud | Jenkins in Docker; declarative `Jenkinsfile`: build → unit tests → Testcontainers tests → JaCoCo coverage gate → Trivy scan → push image → deploy; credentials store for secrets; webhook trigger; HTTPS deployment |
