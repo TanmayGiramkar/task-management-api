@@ -8,7 +8,9 @@ import com.example.taskapi.exception.InvalidQueryParameterException;
 import com.example.taskapi.exception.TaskNotFoundException;
 import com.example.taskapi.model.Task;
 import com.example.taskapi.model.TaskStatus;
+import com.example.taskapi.model.User;
 import com.example.taskapi.repository.TaskRepository;
+import com.example.taskapi.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -39,33 +41,47 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link TaskService}. The repository is a Mockito mock, so these tests check the
+ * Unit tests for {@link TaskService}. The repositories are Mockito mocks, so these tests check the
  * service's own rules without Spring or a database. What the Specifications do in SQL is tested
- * against real PostgreSQL in {@code TaskSpecificationsIT}.
+ * against real PostgreSQL in {@code TaskSpecificationsIT}, and cross-user access end to end in
+ * {@code TaskOwnershipIT}.
  */
 @ExtendWith(MockitoExtension.class)
 class TaskServiceTest {
 
     private static final LocalDateTime CREATED_AT = LocalDateTime.of(2026, 11, 7, 10, 30, 15);
 
+    /** The logged-in user every test acts as. */
+    private static final long OWNER_ID = 7L;
+    private static final User OWNER = userWithId(OWNER_ID);
+
     @Mock
     private TaskRepository taskRepository;
+
+    @Mock
+    private UserRepository userRepository;
 
     private TaskService taskService;
 
     @BeforeEach
     void setUp() {
-        // Constructor injection: no Spring needed, just pass the mock in
-        taskService = new TaskService(taskRepository);
+        // Constructor injection: no Spring needed, just pass the mocks in
+        taskService = new TaskService(taskRepository, userRepository);
+    }
+
+    private static User userWithId(long id) {
+        User user = new User("owner@example.com", "hash");
+        ReflectionTestUtils.setField(user, "id", id);
+        return user;
     }
 
     /**
-     * A task as if loaded from the database. The entity has no setters for id and timestamps
-     * (the database and JPA callbacks own them), so the test sets them by reflection instead of
-     * adding setters to production code.
+     * A task owned by {@link #OWNER}, as if loaded from the database. The entity has no setters for id
+     * and timestamps (the database and JPA callbacks own them), so the test sets them by reflection
+     * instead of adding setters to production code.
      */
     private static Task storedTask(long id, String title, String description, TaskStatus status) {
-        Task task = new Task(title, description, status);
+        Task task = new Task(OWNER, title, description, status);
         ReflectionTestUtils.setField(task, "id", id);
         ReflectionTestUtils.setField(task, "createdAt", CREATED_AT);
         ReflectionTestUtils.setField(task, "updatedAt", CREATED_AT);
@@ -89,14 +105,15 @@ class TaskServiceTest {
     class CreateTask {
 
         @Test
-        void savesTaskWithRequestValuesAndReturnsIt() {
+        void savesTaskWithRequestValuesAndTheCurrentUserAsOwner() {
+            when(userRepository.getReferenceById(OWNER_ID)).thenReturn(OWNER);
             when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> {
                 Task task = invocation.getArgument(0);
                 ReflectionTestUtils.setField(task, "id", 1L);
                 return task;
             });
 
-            TaskResponse response = taskService.createTask(
+            TaskResponse response = taskService.createTask(OWNER_ID,
                     taskRequest("Write report", "First draft", TaskStatus.IN_PROGRESS));
 
             ArgumentCaptor<Task> saved = ArgumentCaptor.forClass(Task.class);
@@ -104,6 +121,7 @@ class TaskServiceTest {
             assertThat(saved.getValue().getTitle()).isEqualTo("Write report");
             assertThat(saved.getValue().getDescription()).isEqualTo("First draft");
             assertThat(saved.getValue().getStatus()).isEqualTo(TaskStatus.IN_PROGRESS);
+            assertThat(saved.getValue().getOwner()).isSameAs(OWNER);
 
             assertThat(response.getId()).isEqualTo(1L);
             assertThat(response.getTitle()).isEqualTo("Write report");
@@ -116,10 +134,10 @@ class TaskServiceTest {
 
         @Test
         void returnsAllFieldsOfTheTask() {
-            when(taskRepository.findById(10L))
+            when(taskRepository.findByIdAndOwnerId(10L, OWNER_ID))
                     .thenReturn(Optional.of(storedTask(10L, "Write report", "First draft", TaskStatus.TODO)));
 
-            TaskResponse response = taskService.getTaskById(10L);
+            TaskResponse response = taskService.getTaskById(OWNER_ID, 10L);
 
             assertThat(response.getId()).isEqualTo(10L);
             assertThat(response.getTitle()).isEqualTo("Write report");
@@ -130,10 +148,22 @@ class TaskServiceTest {
         }
 
         @Test
-        void throwsNotFoundForUnknownId() {
-            when(taskRepository.findById(42L)).thenReturn(Optional.empty());
+        void looksUpTasksOnlyAmongTheCurrentUsersTasks() {
+            // Another user's task 10 is not returned by the owner-filtered query, so it is "not found"
+            when(taskRepository.findByIdAndOwnerId(10L, OWNER_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> taskService.getTaskById(42L))
+            assertThatThrownBy(() -> taskService.getTaskById(OWNER_ID, 10L))
+                    .isInstanceOf(TaskNotFoundException.class)
+                    .hasMessage("Task not found with id: 10");
+            // Never a lookup by id alone, which would find any user's task
+            verify(taskRepository, never()).findById(any());
+        }
+
+        @Test
+        void throwsNotFoundForUnknownId() {
+            when(taskRepository.findByIdAndOwnerId(42L, OWNER_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> taskService.getTaskById(OWNER_ID, 42L))
                     .isInstanceOf(TaskNotFoundException.class)
                     .hasMessage("Task not found with id: 42");
         }
@@ -144,11 +174,11 @@ class TaskServiceTest {
 
         @Test
         void replacesTitleDescriptionAndStatus() {
-            when(taskRepository.findById(10L))
+            when(taskRepository.findByIdAndOwnerId(10L, OWNER_ID))
                     .thenReturn(Optional.of(storedTask(10L, "Old title", "Old description", TaskStatus.TODO)));
             saveReturnsItsArgument();
 
-            TaskResponse response = taskService.updateTask(10L,
+            TaskResponse response = taskService.updateTask(OWNER_ID, 10L,
                     taskRequest("New title", "New description", TaskStatus.COMPLETED));
 
             assertThat(response.getTitle()).isEqualTo("New title");
@@ -158,31 +188,31 @@ class TaskServiceTest {
 
         @Test
         void clearsDescriptionWhenOmitted() {
-            when(taskRepository.findById(10L))
+            when(taskRepository.findByIdAndOwnerId(10L, OWNER_ID))
                     .thenReturn(Optional.of(storedTask(10L, "Old title", "Old description", TaskStatus.TODO)));
             saveReturnsItsArgument();
 
-            TaskResponse response = taskService.updateTask(10L, taskRequest("New title", null, null));
+            TaskResponse response = taskService.updateTask(OWNER_ID, 10L, taskRequest("New title", null, null));
 
             assertThat(response.getDescription()).isNull();
         }
 
         @Test
         void keepsCurrentStatusWhenOmitted() {
-            when(taskRepository.findById(10L))
+            when(taskRepository.findByIdAndOwnerId(10L, OWNER_ID))
                     .thenReturn(Optional.of(storedTask(10L, "Old title", null, TaskStatus.IN_PROGRESS)));
             saveReturnsItsArgument();
 
-            TaskResponse response = taskService.updateTask(10L, taskRequest("New title", null, null));
+            TaskResponse response = taskService.updateTask(OWNER_ID, 10L, taskRequest("New title", null, null));
 
             assertThat(response.getStatus()).isEqualTo(TaskStatus.IN_PROGRESS);
         }
 
         @Test
         void throwsNotFoundAndSavesNothingForUnknownId() {
-            when(taskRepository.findById(42L)).thenReturn(Optional.empty());
+            when(taskRepository.findByIdAndOwnerId(42L, OWNER_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> taskService.updateTask(42L, taskRequest("New title", null, null)))
+            assertThatThrownBy(() -> taskService.updateTask(OWNER_ID, 42L, taskRequest("New title", null, null)))
                     .isInstanceOf(TaskNotFoundException.class)
                     .hasMessage("Task not found with id: 42");
             verify(taskRepository, never()).save(any(Task.class));
@@ -194,11 +224,11 @@ class TaskServiceTest {
 
         @Test
         void changesOnlyTheFieldsSent() {
-            when(taskRepository.findById(10L))
+            when(taskRepository.findByIdAndOwnerId(10L, OWNER_ID))
                     .thenReturn(Optional.of(storedTask(10L, "Title", "Description", TaskStatus.TODO)));
             saveReturnsItsArgument();
 
-            TaskResponse response = taskService.patchTask(10L,
+            TaskResponse response = taskService.patchTask(OWNER_ID, 10L,
                     new TaskPatchRequest(null, null, TaskStatus.COMPLETED));
 
             assertThat(response.getTitle()).isEqualTo("Title");
@@ -208,11 +238,11 @@ class TaskServiceTest {
 
         @Test
         void changesEveryFieldWhenAllAreSent() {
-            when(taskRepository.findById(10L))
+            when(taskRepository.findByIdAndOwnerId(10L, OWNER_ID))
                     .thenReturn(Optional.of(storedTask(10L, "Title", "Description", TaskStatus.TODO)));
             saveReturnsItsArgument();
 
-            TaskResponse response = taskService.patchTask(10L,
+            TaskResponse response = taskService.patchTask(OWNER_ID, 10L,
                     new TaskPatchRequest("New title", "New description", TaskStatus.IN_PROGRESS));
 
             assertThat(response.getTitle()).isEqualTo("New title");
@@ -222,11 +252,11 @@ class TaskServiceTest {
 
         @Test
         void emptyPatchLeavesTaskUnchanged() {
-            when(taskRepository.findById(10L))
+            when(taskRepository.findByIdAndOwnerId(10L, OWNER_ID))
                     .thenReturn(Optional.of(storedTask(10L, "Title", "Description", TaskStatus.TODO)));
             saveReturnsItsArgument();
 
-            TaskResponse response = taskService.patchTask(10L, new TaskPatchRequest(null, null, null));
+            TaskResponse response = taskService.patchTask(OWNER_ID, 10L, new TaskPatchRequest(null, null, null));
 
             assertThat(response.getTitle()).isEqualTo("Title");
             assertThat(response.getDescription()).isEqualTo("Description");
@@ -235,9 +265,9 @@ class TaskServiceTest {
 
         @Test
         void throwsNotFoundAndSavesNothingForUnknownId() {
-            when(taskRepository.findById(42L)).thenReturn(Optional.empty());
+            when(taskRepository.findByIdAndOwnerId(42L, OWNER_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> taskService.patchTask(42L, new TaskPatchRequest("New title", null, null)))
+            assertThatThrownBy(() -> taskService.patchTask(OWNER_ID, 42L, new TaskPatchRequest("New title", null, null)))
                     .isInstanceOf(TaskNotFoundException.class)
                     .hasMessage("Task not found with id: 42");
             verify(taskRepository, never()).save(any(Task.class));
@@ -250,18 +280,18 @@ class TaskServiceTest {
         @Test
         void deletesTheTask() {
             Task task = storedTask(10L, "Title", null, TaskStatus.TODO);
-            when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+            when(taskRepository.findByIdAndOwnerId(10L, OWNER_ID)).thenReturn(Optional.of(task));
 
-            taskService.deleteTask(10L);
+            taskService.deleteTask(OWNER_ID, 10L);
 
             verify(taskRepository).delete(task);
         }
 
         @Test
         void throwsNotFoundAndDeletesNothingForUnknownId() {
-            when(taskRepository.findById(42L)).thenReturn(Optional.empty());
+            when(taskRepository.findByIdAndOwnerId(42L, OWNER_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> taskService.deleteTask(42L))
+            assertThatThrownBy(() -> taskService.deleteTask(OWNER_ID, 42L))
                     .isInstanceOf(TaskNotFoundException.class)
                     .hasMessage("Task not found with id: 42");
             verify(taskRepository, never()).delete(any(Task.class));
@@ -281,7 +311,7 @@ class TaskServiceTest {
 
         /** Runs getAllTasks and returns the Pageable the service passed to the repository. */
         private Pageable pageableUsedFor(String sortBy, String direction, int page, int size) {
-            taskService.getAllTasks(null, null, sortBy, direction, page, size);
+            taskService.getAllTasks(OWNER_ID, null, null, sortBy, direction, page, size);
 
             ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
             verify(taskRepository).findAll(ArgumentMatchers.<Specification<Task>>any(), pageable.capture());
@@ -356,7 +386,7 @@ class TaskServiceTest {
             findAllReturnsPageOf(3);
 
             PageResponse<TaskResponse> response =
-                    taskService.getAllTasks(TaskStatus.TODO, "report", "id", "asc", 1, 2);
+                    taskService.getAllTasks(OWNER_ID, TaskStatus.TODO, "report", "id", "asc", 1, 2);
 
             assertThat(response.content()).extracting(TaskResponse::getId).containsExactly(10L);
             assertThat(response.page()).isEqualTo(1);
@@ -369,7 +399,7 @@ class TaskServiceTest {
 
         @Test
         void rejectsNegativePage() {
-            assertThatThrownBy(() -> taskService.getAllTasks(null, null, null, "asc", -1, 10))
+            assertThatThrownBy(() -> taskService.getAllTasks(OWNER_ID, null, null, null, "asc", -1, 10))
                     .isInstanceOf(InvalidQueryParameterException.class)
                     .hasMessage("Page index must not be negative");
             verifyNoInteractions(taskRepository);
@@ -378,7 +408,7 @@ class TaskServiceTest {
         @ParameterizedTest
         @ValueSource(ints = {-1, 0, 51})
         void rejectsPageSizeOutsideOneToFifty(int size) {
-            assertThatThrownBy(() -> taskService.getAllTasks(null, null, null, "asc", 0, size))
+            assertThatThrownBy(() -> taskService.getAllTasks(OWNER_ID, null, null, null, "asc", 0, size))
                     .isInstanceOf(InvalidQueryParameterException.class)
                     .hasMessage("Page size must be between 1 and 50");
             verifyNoInteractions(taskRepository);
@@ -387,7 +417,7 @@ class TaskServiceTest {
         @ParameterizedTest
         @ValueSource(strings = {"priority", "description", "title; DROP TABLE tasks"})
         void rejectsSortFieldsOutsideTheWhitelist(String sortBy) {
-            assertThatThrownBy(() -> taskService.getAllTasks(null, null, sortBy, "asc", 0, 10))
+            assertThatThrownBy(() -> taskService.getAllTasks(OWNER_ID, null, null, sortBy, "asc", 0, 10))
                     .isInstanceOf(InvalidQueryParameterException.class)
                     .hasMessageStartingWith("Invalid sortBy field: '" + sortBy + "'");
             verifyNoInteractions(taskRepository);
@@ -395,7 +425,7 @@ class TaskServiceTest {
 
         @Test
         void rejectsUnknownDirection() {
-            assertThatThrownBy(() -> taskService.getAllTasks(null, null, null, "sideways", 0, 10))
+            assertThatThrownBy(() -> taskService.getAllTasks(OWNER_ID, null, null, null, "sideways", 0, 10))
                     .isInstanceOf(InvalidQueryParameterException.class)
                     .hasMessage("Invalid direction: 'sideways'. Allowed values: asc, desc");
             verifyNoInteractions(taskRepository);

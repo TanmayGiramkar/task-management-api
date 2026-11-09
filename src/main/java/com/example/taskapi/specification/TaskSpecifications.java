@@ -10,6 +10,11 @@ public final class TaskSpecifications {
         // Utility class: not meant to be instantiated
     }
 
+    /** Tasks owned by this user. Compares the owner_id column, so no join to users is needed. */
+    public static Specification<Task> ownedBy(Long ownerId) {
+        return (root, query, cb) -> cb.equal(root.get("owner").get("id"), ownerId);
+    }
+
     public static Specification<Task> hasStatus(TaskStatus status) {
         return (root, query, cb) -> {
             if (status == null) {
