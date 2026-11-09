@@ -100,10 +100,14 @@ learns from it, and must be able to explain every decision in an interview.** So
   `target_test-classes/`, `*.log`
 
 ### Error response contract (keep this shape for every new error)
+Every error is **RFC 9457 Problem Details** (Spring's `ProblemDetail`), `Content-Type: application/problem+json`,
+built in `GlobalExceptionHandler` (ADR 0003):
 ```json
-{ "status": 400, "message": "...", "timestamp": "..." }
+{ "title": "Not Found", "status": 404, "detail": "...", "instance": "/tasks/42", "timestamp": "..." }
 ```
-Validation errors add `"errors": { "field": "message" }` with `"message": "Validation failed"`.
+`type` is omitted (= `about:blank`), so `title` is the HTTP status phrase; `instance` is the request path,
+filled in by Spring. Validation errors add `"errors": { "field": "message" }` with `"detail": "Validation failed"`.
+New errors: add an `@ExceptionHandler` that returns `problem(status, detail)`; never a custom error class.
 
 ### Package layout (`com.example.taskapi`)
 `config`, `controller`, `dto`, `exception`, `model`, `repository`, `service`, `specification`.

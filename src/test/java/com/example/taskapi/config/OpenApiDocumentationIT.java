@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OpenApiDocumentationIT {
 
     private static final String API_DOCS = "/v3/api-docs";
-    private static final String JSON = "content['application/json']";
+    private static final String PROBLEM_JSON = "content['application/problem+json']";
 
     @Autowired
     private MockMvc mockMvc;
@@ -40,7 +40,7 @@ class OpenApiDocumentationIT {
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.info.title").value("Task Management API"))
-                .andExpect(jsonPath("$.info.version").value("1.0.0"));
+                .andExpect(jsonPath("$.info.version").value("2.0.0"));
     }
 
     @Test
@@ -72,20 +72,32 @@ class OpenApiDocumentationIT {
     }
 
     @Test
-    void errorResponsesUseTheSharedErrorSchemas() throws Exception {
+    void errorResponsesUseTheProblemDetailSchema() throws Exception {
+        String problemSchema = "#/components/schemas/ProblemDetail";
+
         mockMvc.perform(get(API_DOCS))
-                .andExpect(jsonPath("$.paths['/tasks/{id}'].get.responses['404']." + JSON + ".schema['$ref']")
-                        .value("#/components/schemas/ErrorResponse"))
-                .andExpect(jsonPath("$.paths['/tasks'].post.responses['400']." + JSON + ".schema.oneOf[*]['$ref']",
-                        containsInAnyOrder(
-                                "#/components/schemas/ValidationErrorResponse",
-                                "#/components/schemas/ErrorResponse")))
-                .andExpect(jsonPath("$.paths['/tasks'].post.responses['500']." + JSON + ".schema['$ref']")
-                        .value("#/components/schemas/ErrorResponse"))
-                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.status").exists())
-                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.message").exists())
-                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.timestamp").exists())
-                .andExpect(jsonPath("$.components.schemas.ValidationErrorResponse.properties.errors").exists());
+                .andExpect(jsonPath("$.paths['/tasks/{id}'].get.responses['404']." + PROBLEM_JSON + ".schema['$ref']")
+                        .value(problemSchema))
+                .andExpect(jsonPath("$.paths['/tasks'].post.responses['400']." + PROBLEM_JSON + ".schema['$ref']")
+                        .value(problemSchema))
+                .andExpect(jsonPath("$.paths['/tasks'].post.responses['500']." + PROBLEM_JSON + ".schema['$ref']")
+                        .value(problemSchema));
+    }
+
+    @Test
+    void problemDetailSchemaMatchesTheJsonTheApiReturns() throws Exception {
+        String properties = "$.components.schemas.ProblemDetail.properties";
+
+        mockMvc.perform(get(API_DOCS))
+                .andExpect(jsonPath(properties + ".type").exists())
+                .andExpect(jsonPath(properties + ".title").exists())
+                .andExpect(jsonPath(properties + ".status").exists())
+                .andExpect(jsonPath(properties + ".detail").exists())
+                .andExpect(jsonPath(properties + ".instance").exists())
+                .andExpect(jsonPath(properties + ".timestamp").exists())
+                .andExpect(jsonPath(properties + ".errors").exists())
+                // Spring writes extensions at the top level, not inside a nested "properties" object
+                .andExpect(jsonPath(properties + ".properties").doesNotExist());
     }
 
     @Test

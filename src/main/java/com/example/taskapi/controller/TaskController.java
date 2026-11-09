@@ -10,8 +10,7 @@ import com.example.taskapi.model.TaskStatus;
 import com.example.taskapi.dto.PageResponse;
 import com.example.taskapi.dto.TaskPatchRequest;
 import com.example.taskapi.config.OpenApiExamples;
-import com.example.taskapi.exception.GlobalExceptionHandler.ErrorResponse;
-import com.example.taskapi.exception.GlobalExceptionHandler.ValidationErrorResponse;
+import org.springframework.http.ProblemDetail;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -20,11 +19,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON_VALUE;
+
 @RestController
 @RequestMapping("/tasks")
 @Tag(name = "Tasks", description = "Create, read, update and delete tasks")
 @ApiResponse(responseCode = "500", description = "Unexpected server error. Details are logged, never returned",
-        content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+        content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                 examples = @ExampleObject(value = OpenApiExamples.INTERNAL_ERROR)))
 public class TaskController {
 
@@ -40,7 +41,7 @@ public class TaskController {
             description = "Creates a task. `title` is required. `status` defaults to `TODO` when omitted.")
     @ApiResponse(responseCode = "201", description = "Task created")
     @ApiResponse(responseCode = "400", description = "Validation failed, or the request body is malformed",
-            content = @Content(schema = @Schema(oneOf = {ValidationErrorResponse.class, ErrorResponse.class}),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = {
                             @ExampleObject(name = "Validation failed",
                                     value = OpenApiExamples.VALIDATION_FAILED),
@@ -59,7 +60,7 @@ public class TaskController {
                     so pages are stable. The maximum page size is 50.""")
     @ApiResponse(responseCode = "200", description = "One page of tasks")
     @ApiResponse(responseCode = "400", description = "Invalid query parameter",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = {
                             @ExampleObject(name = "Invalid page size",
                                     value = OpenApiExamples.INVALID_PAGE_SIZE),
@@ -91,10 +92,10 @@ public class TaskController {
     @Operation(summary = "Get a task by id")
     @ApiResponse(responseCode = "200", description = "The task")
     @ApiResponse(responseCode = "400", description = "The id is not a number",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.INVALID_ID)))
     @ApiResponse(responseCode = "404", description = "No task with this id",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.TASK_NOT_FOUND)))
     public TaskResponse getTaskById(@Parameter(description = "Task id", example = "10") @PathVariable Long id) {
         return taskService.getTaskById(id);
@@ -109,7 +110,7 @@ public class TaskController {
                     the current status is kept.""")
     @ApiResponse(responseCode = "200", description = "The replaced task")
     @ApiResponse(responseCode = "400", description = "Validation failed, the request body is malformed, or the id is not a number",
-            content = @Content(schema = @Schema(oneOf = {ValidationErrorResponse.class, ErrorResponse.class}),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = {
                             @ExampleObject(name = "Validation failed",
                                     value = OpenApiExamples.VALIDATION_FAILED),
@@ -119,7 +120,7 @@ public class TaskController {
                                     value = OpenApiExamples.INVALID_ID)
                     }))
     @ApiResponse(responseCode = "404", description = "No task with this id",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.TASK_NOT_FOUND)))
     public TaskResponse updateTask(
             @Parameter(description = "Task id", example = "10") @PathVariable Long id,
@@ -135,7 +136,7 @@ public class TaskController {
                     A `title`, if sent, must not be blank.""")
     @ApiResponse(responseCode = "200", description = "The updated task")
     @ApiResponse(responseCode = "400", description = "Validation failed, the request body is malformed, or the id is not a number",
-            content = @Content(schema = @Schema(oneOf = {ValidationErrorResponse.class, ErrorResponse.class}),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = {
                             @ExampleObject(name = "Validation failed",
                                     value = OpenApiExamples.VALIDATION_FAILED),
@@ -145,7 +146,7 @@ public class TaskController {
                                     value = OpenApiExamples.INVALID_ID)
                     }))
     @ApiResponse(responseCode = "404", description = "No task with this id",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.TASK_NOT_FOUND)))
     public TaskResponse patchTask(
             @Parameter(description = "Task id", example = "10") @PathVariable Long id,
@@ -159,10 +160,10 @@ public class TaskController {
     @Operation(summary = "Delete a task", description = "Permanently deletes the task.")
     @ApiResponse(responseCode = "204", description = "Task deleted. No response body")
     @ApiResponse(responseCode = "400", description = "The id is not a number",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.INVALID_ID)))
     @ApiResponse(responseCode = "404", description = "No task with this id",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.TASK_NOT_FOUND)))
     public void deleteTask(@Parameter(description = "Task id", example = "10") @PathVariable Long id) {
         taskService.deleteTask(id);

@@ -107,13 +107,22 @@ With the app running:
 
 ## Errors
 
-Every error has the same shape:
+Every error is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) Problem Details body,
+sent as `application/problem+json`:
 
 ```json
-{ "status": 404, "message": "Task not found with id: 42", "timestamp": "2026-11-04T17:01:34.431" }
+{
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Task not found with id: 42",
+  "instance": "/tasks/42",
+  "timestamp": "2026-11-04T17:01:34.431"
+}
 ```
 
-Validation errors return 400 with `"message": "Validation failed"` and an `errors` map of field name to message.
+`type` is omitted, which means `about:blank`: the HTTP status describes the problem and `title` is its phrase.
+`detail` explains this occurrence and `instance` is the request path.
+Validation errors return 400 with `"detail": "Validation failed"` and an `errors` map of field name to message.
 Status codes used: 400, 404, 405 and 500. Stack traces are never returned.
 
 ## Project layout

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -68,12 +69,17 @@ class TaskControllerTest {
         return mockMvc.perform(request.contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
-    /** Every error uses the same body: status, message and timestamp. */
-    private static void expectErrorBody(ResultActions result, int status, String message) throws Exception {
+    /**
+     * Every error is an RFC 9457 Problem Details body: title (the status phrase), status, detail,
+     * instance (the request path) and a timestamp extension, sent as application/problem+json.
+     */
+    private static void expectProblem(ResultActions result, int status, String detail) throws Exception {
         result.andExpect(status().is(status))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value(HttpStatus.valueOf(status).getReasonPhrase()))
                 .andExpect(jsonPath("$.status").value(status))
-                .andExpect(jsonPath("$.message").value(message))
+                .andExpect(jsonPath("$.detail").value(detail))
+                .andExpect(jsonPath("$.instance").value(result.andReturn().getRequest().getRequestURI()))
                 .andExpect(jsonPath("$.timestamp").isNotEmpty());
     }
 
@@ -116,7 +122,7 @@ class TaskControllerTest {
         void rejectsMissingTitle() throws Exception {
             ResultActions result = sendJson(post("/tasks"), "{}");
 
-            expectErrorBody(result, 400, "Validation failed");
+            expectProblem(result, 400, "Validation failed");
             result.andExpect(jsonPath("$.errors.title").value("Title is required"));
             verifyNoInteractions(taskService);
         }
@@ -152,7 +158,7 @@ class TaskControllerTest {
         void rejectsMalformedJson() throws Exception {
             ResultActions result = sendJson(post("/tasks"), "{\"title\": ");
 
-            expectErrorBody(result, 400, "Request body is malformed or contains invalid values");
+            expectProblem(result, 400, "Request body is malformed or contains invalid values");
             verifyNoInteractions(taskService);
         }
 
@@ -162,7 +168,7 @@ class TaskControllerTest {
                     {"title": "Write report", "status": "DONE"}
                     """);
 
-            expectErrorBody(result, 400, "Request body is malformed or contains invalid values");
+            expectProblem(result, 400, "Request body is malformed or contains invalid values");
             verifyNoInteractions(taskService);
         }
     }
@@ -210,7 +216,7 @@ class TaskControllerTest {
         void rejectsUnknownStatusAndListsAllowedValues() throws Exception {
             ResultActions result = mockMvc.perform(get("/tasks").param("status", "DONE"));
 
-            expectErrorBody(result, 400,
+            expectProblem(result, 400,
                     "Invalid value 'DONE' for parameter 'status'. Allowed values: [TODO, IN_PROGRESS, COMPLETED]");
             verifyNoInteractions(taskService);
         }
@@ -219,7 +225,7 @@ class TaskControllerTest {
         void rejectsNonNumericPage() throws Exception {
             ResultActions result = mockMvc.perform(get("/tasks").param("page", "abc"));
 
-            expectErrorBody(result, 400, "Invalid value 'abc' for parameter 'page'");
+            expectProblem(result, 400, "Invalid value 'abc' for parameter 'page'");
             verifyNoInteractions(taskService);
         }
 
@@ -230,7 +236,7 @@ class TaskControllerTest {
 
             ResultActions result = mockMvc.perform(get("/tasks").param("size", "51"));
 
-            expectErrorBody(result, 400, "Page size must be between 1 and 50");
+            expectProblem(result, 400, "Page size must be between 1 and 50");
         }
     }
 
@@ -252,12 +258,12 @@ class TaskControllerTest {
         void returns404ForUnknownId() throws Exception {
             when(taskService.getTaskById(42L)).thenThrow(new TaskNotFoundException("Task not found with id: 42"));
 
-            expectErrorBody(mockMvc.perform(get("/tasks/42")), 404, "Task not found with id: 42");
+            expectProblem(mockMvc.perform(get("/tasks/42")), 404, "Task not found with id: 42");
         }
 
         @Test
         void returns400ForNonNumericId() throws Exception {
-            expectErrorBody(mockMvc.perform(get("/tasks/abc")), 400, "Invalid value 'abc' for parameter 'id'");
+            expectProblem(mockMvc.perform(get("/tasks/abc")), 400, "Invalid value 'abc' for parameter 'id'");
             verifyNoInteractions(taskService);
         }
     }
@@ -297,7 +303,7 @@ class TaskControllerTest {
             when(taskService.updateTask(eq(42L), any(TaskRequest.class)))
                     .thenThrow(new TaskNotFoundException("Task not found with id: 42"));
 
-            expectErrorBody(sendJson(put("/tasks/42"), """
+            expectProblem(sendJson(put("/tasks/42"), """
                     {"title": "New title"}
                     """), 404, "Task not found with id: 42");
         }
@@ -334,7 +340,7 @@ class TaskControllerTest {
                     {"title": "   "}
                     """)
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.message").value("Validation failed"))
+                    .andExpect(jsonPath("$.detail").value("Validation failed"))
                     .andExpect(jsonPath("$.errors.title").value("Title must not be blank"));
             verifyNoInteractions(taskService);
         }
@@ -352,7 +358,7 @@ class TaskControllerTest {
             when(taskService.patchTask(eq(42L), any(TaskPatchRequest.class)))
                     .thenThrow(new TaskNotFoundException("Task not found with id: 42"));
 
-            expectErrorBody(sendJson(patch("/tasks/42"), "{}"), 404, "Task not found with id: 42");
+            expectProblem(sendJson(patch("/tasks/42"), "{}"), 404, "Task not found with id: 42");
         }
     }
 
@@ -373,7 +379,7 @@ class TaskControllerTest {
             doThrow(new TaskNotFoundException("Task not found with id: 42"))
                     .when(taskService).deleteTask(42L);
 
-            expectErrorBody(mockMvc.perform(delete("/tasks/42")), 404, "Task not found with id: 42");
+            expectProblem(mockMvc.perform(delete("/tasks/42")), 404, "Task not found with id: 42");
         }
     }
 
@@ -382,13 +388,13 @@ class TaskControllerTest {
 
         @Test
         void returns405ForUnsupportedMethod() throws Exception {
-            expectErrorBody(mockMvc.perform(post("/tasks/10")), 405,
+            expectProblem(mockMvc.perform(post("/tasks/10")), 405,
                     "Request method 'POST' is not supported for this endpoint");
         }
 
         @Test
         void returns404ForUnknownPath() throws Exception {
-            expectErrorBody(mockMvc.perform(get("/no-such-path")), 404,
+            expectProblem(mockMvc.perform(get("/no-such-path")), 404,
                     "No endpoint found for path: /no-such-path");
         }
 
@@ -399,7 +405,7 @@ class TaskControllerTest {
 
             ResultActions result = mockMvc.perform(get("/tasks/10"));
 
-            expectErrorBody(result, 500, "An unexpected error occurred");
+            expectProblem(result, 500, "An unexpected error occurred");
             result.andExpect(content().string(not(containsString("internal-db-host"))))
                     .andExpect(content().string(not(containsString("IllegalStateException"))))
                     .andExpect(jsonPath("$.trace").doesNotExist());

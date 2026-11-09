@@ -148,7 +148,7 @@ class TaskApiIT {
 
         mockMvc.perform(get("/tasks/{id}", id))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Task not found with id: " + id));
+                .andExpect(jsonPath("$.detail").value("Task not found with id: " + id));
         assertThat(taskRepository.existsById(id)).isFalse();
     }
 
