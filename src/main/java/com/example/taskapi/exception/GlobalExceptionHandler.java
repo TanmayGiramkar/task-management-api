@@ -5,6 +5,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -45,6 +49,39 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Validation failed");
         problem.setProperty("errors", errors);
         return problem;
+    }
+
+    @ExceptionHandler(FieldValidationException.class)
+    public ProblemDetail handleFieldValidation(FieldValidationException exception) {
+        ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Validation failed");
+        problem.setProperty("errors", Map.of(exception.getField(), exception.getMessage()));
+        return problem;
+    }
+
+    @ExceptionHandler(EmailAlreadyRegisteredException.class)
+    public ProblemDetail handleEmailAlreadyRegistered(EmailAlreadyRegisteredException exception) {
+        return problem(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
+    /**
+     * 401. Thrown by login (wrong credentials) and, through ProblemDetailsAuthenticationEntryPoint, by the
+     * security filter chain (missing or invalid token). The detail never says why a token was invalid
+     * beyond this, and never says whether an email exists.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ProblemDetail handleAuthentication(AuthenticationException exception) {
+        String detail = switch (exception) {
+            case BadCredentialsException badCredentials -> "Invalid email or password";
+            case InvalidBearerTokenException invalidToken -> "Access token is invalid or expired";
+            default -> "Authentication is required";
+        };
+        return problem(HttpStatus.UNAUTHORIZED, detail);
+    }
+
+    /** 403, through ProblemDetailsAccessDeniedHandler or method security. */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ProblemDetail handleAccessDenied(AccessDeniedException exception) {
+        return problem(HttpStatus.FORBIDDEN, "You do not have permission to perform this action");
     }
 
     @ExceptionHandler(InvalidQueryParameterException.class)

@@ -9,6 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,6 +53,18 @@ class FlywayMigrationIT {
         assertThatThrownBy(() -> jdbcTemplate.update("""
                 INSERT INTO tasks (title, status, created_at, updated_at)
                 VALUES ('Check constraint test', 'DONE', now(), now())"""))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @Transactional // rolls back the first insert, so the shared test database stays empty
+    void databaseRejectsASecondAccountWithTheSameEmail() {
+        String insert = """
+                INSERT INTO users (email, password_hash, created_at)
+                VALUES ('duplicate@example.com', 'not-a-real-hash', now())""";
+        jdbcTemplate.update(insert);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(insert))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 

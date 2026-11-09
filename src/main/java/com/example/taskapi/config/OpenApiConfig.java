@@ -1,11 +1,14 @@
 package com.example.taskapi.config;
 
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.MapSchema;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.media.StringSchema;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +22,15 @@ public class OpenApiConfig {
     private static final String DESCRIPTION = """
             REST API for managing tasks: create, list (with filtering, search, sorting and pagination), \
             replace, partially update and delete.
+
+            ## Authentication
+
+            1. `POST /auth/register` to create an account.
+            2. `POST /auth/login` to get an `accessToken` (a JWT, valid for 15 minutes).
+            3. Send it on every `/tasks` request as `Authorization: Bearer <accessToken>`. \
+            In Swagger UI, click **Authorize** and paste the token.
+
+            A missing, malformed or expired token gets `401` with a `WWW-Authenticate: Bearer` header.
 
             ## Error responses
 
@@ -38,7 +50,9 @@ public class OpenApiConfig {
             | Status | When |
             |---|---|
             | 400 | Failed validation, malformed request body, or an invalid path or query parameter |
+            | 401 | Missing, invalid or expired access token, or wrong email or password on login |
             | 404 | No task with the given id, or no endpoint for the requested path |
+            | 409 | Registering an email that already has an account |
             | 405 | The HTTP method is not supported for the path, for example `PUT /tasks` |
             | 500 | Unexpected server error. Details are logged on the server and never returned |
 
@@ -51,6 +65,13 @@ public class OpenApiConfig {
             Asia/Kolkata time zone, without a UTC offset.
             """;
 
+    static final String BEARER_AUTH = "bearerAuth";
+
+    /**
+     * Declares the JWT bearer scheme and requires it on every operation by default; AuthController
+     * opts out with an empty {@code @SecurityRequirements}. This is what gives Swagger UI its
+     * Authorize button and lock icons.
+     */
     @Bean
     public OpenAPI taskApiOpenApi() {
         return new OpenAPI()
@@ -60,7 +81,14 @@ public class OpenApiConfig {
                         .description(DESCRIPTION)
                         .contact(new Contact()
                                 .name("Tanmay Giramkar")
-                                .url("https://github.com/TanmayGiramkar/task-management-api")));
+                                .url("https://github.com/TanmayGiramkar/task-management-api")))
+                .components(new Components()
+                        .addSecuritySchemes(BEARER_AUTH, new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")
+                                .description("Access token from POST /auth/login")))
+                .addSecurityItem(new SecurityRequirement().addList(BEARER_AUTH));
     }
 
     /**

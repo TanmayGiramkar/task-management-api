@@ -67,8 +67,29 @@ class OpenApiDocumentationIT {
                 .andExpect(jsonPath("$.paths['/tasks/{id}'].patch.responses['404']").exists())
                 .andExpect(jsonPath("$.paths['/tasks/{id}'].delete.responses['204']").exists())
                 .andExpect(jsonPath("$.paths['/tasks/{id}'].delete.responses['404']").exists())
-                .andExpect(jsonPath("$.paths.*.*.responses['500']", hasSize(6)))
+                .andExpect(jsonPath("$.paths['/auth/register'].post.responses['201']").exists())
+                .andExpect(jsonPath("$.paths['/auth/register'].post.responses['409']").exists())
+                .andExpect(jsonPath("$.paths['/auth/register'].post.responses['401']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/auth/login'].post.responses['200']").exists())
+                .andExpect(jsonPath("$.paths['/auth/login'].post.responses['401']").exists())
+                // 6 task operations + 2 auth operations
+                .andExpect(jsonPath("$.paths.*.*.responses['500']", hasSize(8)))
                 .andExpect(jsonPath("$.paths.*.*.responses['405']").doesNotExist());
+    }
+
+    @Test
+    void taskOperationsRequireABearerTokenAndAuthOperationsDoNot() throws Exception {
+        mockMvc.perform(get(API_DOCS))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
+                .andExpect(jsonPath("$.security[0].bearerAuth").exists())
+                // Every task operation documents the 401 it returns without a valid token
+                .andExpect(jsonPath("$.paths['/tasks'].*.responses['401']", hasSize(2)))
+                .andExpect(jsonPath("$.paths['/tasks/{id}'].*.responses['401']", hasSize(4)))
+                // An empty security list overrides the global requirement: no token needed
+                .andExpect(jsonPath("$.paths['/auth/register'].post.security", hasSize(0)))
+                .andExpect(jsonPath("$.paths['/auth/login'].post.security", hasSize(0)));
     }
 
     @Test

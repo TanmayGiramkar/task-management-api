@@ -24,6 +24,9 @@ import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON_VALUE;
 @RestController
 @RequestMapping("/tasks")
 @Tag(name = "Tasks", description = "Create, read, update and delete tasks")
+@ApiResponse(responseCode = "401", description = "Missing, invalid or expired access token",
+        content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
+                examples = @ExampleObject(value = OpenApiExamples.UNAUTHORIZED)))
 @ApiResponse(responseCode = "500", description = "Unexpected server error. Details are logged, never returned",
         content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                 examples = @ExampleObject(value = OpenApiExamples.INTERNAL_ERROR)))

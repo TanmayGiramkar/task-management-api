@@ -7,14 +7,18 @@ import com.example.taskapi.dto.TaskResponse;
 import com.example.taskapi.exception.InvalidQueryParameterException;
 import com.example.taskapi.exception.TaskNotFoundException;
 import com.example.taskapi.model.TaskStatus;
+import com.example.taskapi.security.SecurityConfig;
 import com.example.taskapi.service.TaskService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -33,6 +37,9 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -48,8 +55,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@code @WebMvcTest} starts only the MVC layer (controllers, advice, JSON, validation), not JPA or the
  * database, and {@code TaskService} is replaced by a mock. So these tests check the HTTP contract:
  * status codes, JSON shape, validation messages and the error body, not the business logic.
+ * <p>
+ * The real {@link SecurityConfig} is imported, so the security filter chain runs as in production.
+ * {@code jwt()} from spring-security-test puts an already-validated token on the request, so these tests
+ * do not need to create signed JWTs; real tokens are tested in {@code AuthenticationIT}.
  */
 @WebMvcTest(TaskController.class)
+@Import(SecurityConfig.class)
 class TaskControllerTest {
 
     private static final LocalDateTime TIME = LocalDateTime.of(2026, 11, 7, 10, 30, 15);
@@ -65,8 +77,13 @@ class TaskControllerTest {
         return new TaskResponse(id, title, description, status, TIME, TIME);
     }
 
+    /** Sends the request as an authenticated user. */
+    private ResultActions perform(MockHttpServletRequestBuilder request) throws Exception {
+        return mockMvc.perform(request.with(jwt().jwt(token -> token.subject("1"))));
+    }
+
     private ResultActions sendJson(MockHttpServletRequestBuilder request, String json) throws Exception {
-        return mockMvc.perform(request.contentType(MediaType.APPLICATION_JSON).content(json));
+        return perform(request.contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
     /**
@@ -183,7 +200,7 @@ class TaskControllerTest {
         void returnsOnePageAndPassesDefaultsToTheService() throws Exception {
             when(taskService.getAllTasks(null, null, null, "asc", 0, 10)).thenReturn(onePage);
 
-            mockMvc.perform(get("/tasks"))
+            perform(get("/tasks"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content[0].id").value(10))
                     .andExpect(jsonPath("$.content[0].title").value("Write report"))
@@ -200,7 +217,7 @@ class TaskControllerTest {
             when(taskService.getAllTasks(TaskStatus.IN_PROGRESS, "report", "title", "desc", 2, 5))
                     .thenReturn(onePage);
 
-            mockMvc.perform(get("/tasks")
+            perform(get("/tasks")
                             .param("status", "IN_PROGRESS")
                             .param("search", "report")
                             .param("sortBy", "title")
@@ -214,7 +231,7 @@ class TaskControllerTest {
 
         @Test
         void rejectsUnknownStatusAndListsAllowedValues() throws Exception {
-            ResultActions result = mockMvc.perform(get("/tasks").param("status", "DONE"));
+            ResultActions result = perform(get("/tasks").param("status", "DONE"));
 
             expectProblem(result, 400,
                     "Invalid value 'DONE' for parameter 'status'. Allowed values: [TODO, IN_PROGRESS, COMPLETED]");
@@ -223,7 +240,7 @@ class TaskControllerTest {
 
         @Test
         void rejectsNonNumericPage() throws Exception {
-            ResultActions result = mockMvc.perform(get("/tasks").param("page", "abc"));
+            ResultActions result = perform(get("/tasks").param("page", "abc"));
 
             expectProblem(result, 400, "Invalid value 'abc' for parameter 'page'");
             verifyNoInteractions(taskService);
@@ -234,7 +251,7 @@ class TaskControllerTest {
             when(taskService.getAllTasks(null, null, null, "asc", 0, 51))
                     .thenThrow(new InvalidQueryParameterException("Page size must be between 1 and 50"));
 
-            ResultActions result = mockMvc.perform(get("/tasks").param("size", "51"));
+            ResultActions result = perform(get("/tasks").param("size", "51"));
 
             expectProblem(result, 400, "Page size must be between 1 and 50");
         }
@@ -247,7 +264,7 @@ class TaskControllerTest {
         void returnsTheTask() throws Exception {
             when(taskService.getTaskById(10L)).thenReturn(task(10L, "Write report", null, TaskStatus.TODO));
 
-            mockMvc.perform(get("/tasks/10"))
+            perform(get("/tasks/10"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(10))
                     .andExpect(jsonPath("$.title").value("Write report"))
@@ -258,12 +275,12 @@ class TaskControllerTest {
         void returns404ForUnknownId() throws Exception {
             when(taskService.getTaskById(42L)).thenThrow(new TaskNotFoundException("Task not found with id: 42"));
 
-            expectProblem(mockMvc.perform(get("/tasks/42")), 404, "Task not found with id: 42");
+            expectProblem(perform(get("/tasks/42")), 404, "Task not found with id: 42");
         }
 
         @Test
         void returns400ForNonNumericId() throws Exception {
-            expectProblem(mockMvc.perform(get("/tasks/abc")), 400, "Invalid value 'abc' for parameter 'id'");
+            expectProblem(perform(get("/tasks/abc")), 400, "Invalid value 'abc' for parameter 'id'");
             verifyNoInteractions(taskService);
         }
     }
@@ -367,7 +384,7 @@ class TaskControllerTest {
 
         @Test
         void returns204WithNoBody() throws Exception {
-            mockMvc.perform(delete("/tasks/10"))
+            perform(delete("/tasks/10"))
                     .andExpect(status().isNoContent())
                     .andExpect(content().string(""));
 
@@ -379,7 +396,7 @@ class TaskControllerTest {
             doThrow(new TaskNotFoundException("Task not found with id: 42"))
                     .when(taskService).deleteTask(42L);
 
-            expectProblem(mockMvc.perform(delete("/tasks/42")), 404, "Task not found with id: 42");
+            expectProblem(perform(delete("/tasks/42")), 404, "Task not found with id: 42");
         }
     }
 
@@ -388,13 +405,13 @@ class TaskControllerTest {
 
         @Test
         void returns405ForUnsupportedMethod() throws Exception {
-            expectProblem(mockMvc.perform(post("/tasks/10")), 405,
+            expectProblem(perform(post("/tasks/10")), 405,
                     "Request method 'POST' is not supported for this endpoint");
         }
 
         @Test
         void returns404ForUnknownPath() throws Exception {
-            expectProblem(mockMvc.perform(get("/no-such-path")), 404,
+            expectProblem(perform(get("/no-such-path")), 404,
                     "No endpoint found for path: /no-such-path");
         }
 
@@ -403,12 +420,48 @@ class TaskControllerTest {
             when(taskService.getTaskById(10L))
                     .thenThrow(new IllegalStateException("Connection refused: internal-db-host:5432"));
 
-            ResultActions result = mockMvc.perform(get("/tasks/10"));
+            ResultActions result = perform(get("/tasks/10"));
 
             expectProblem(result, 500, "An unexpected error occurred");
             result.andExpect(content().string(not(containsString("internal-db-host"))))
                     .andExpect(content().string(not(containsString("IllegalStateException"))))
                     .andExpect(jsonPath("$.trace").doesNotExist());
+        }
+    }
+
+    @Nested
+    class Security {
+
+        @Test
+        void returns401ProblemWithBearerChallengeWhenNoTokenIsSent() throws Exception {
+            ResultActions result = mockMvc.perform(get("/tasks"));
+
+            expectProblem(result, 401, "Authentication is required");
+            result.andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, startsWith("Bearer")));
+            verifyNoInteractions(taskService);
+        }
+
+        @Test
+        void returns401ProblemForAMalformedToken() throws Exception {
+            ResultActions result = mockMvc.perform(get("/tasks")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer not-a-real-jwt"));
+
+            expectProblem(result, 401, "Access token is invalid or expired");
+            result.andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, containsString("invalid_token")));
+            verifyNoInteractions(taskService);
+        }
+
+        @Test
+        void unknownPathsAlsoNeedAToken() throws Exception {
+            expectProblem(mockMvc.perform(get("/no-such-path")), 401, "Authentication is required");
+        }
+
+        @Test
+        void returns403ProblemWhenAccessIsDenied() throws Exception {
+            // No endpoint denies access yet (roles come in Stage 5); this checks the 403 format is ready
+            when(taskService.getTaskById(10L)).thenThrow(new AccessDeniedException("denied"));
+
+            expectProblem(perform(get("/tasks/10")), 403, "You do not have permission to perform this action");
         }
     }
 }

@@ -66,6 +66,47 @@ public final class OpenApiExamples {
             }
             """;
 
+    public static final String REGISTER_VALIDATION_FAILED = """
+            {
+              "title": "Bad Request",
+              "status": 400,
+              "detail": "Validation failed",
+              "instance": "/auth/register",
+              "errors": { "password": "Password must be 8 to 72 characters" },
+              "timestamp": "2026-11-09T14:05:12.886"
+            }
+            """;
+
+    public static final String EMAIL_TAKEN = """
+            {
+              "title": "Conflict",
+              "status": 409,
+              "detail": "An account with this email already exists",
+              "instance": "/auth/register",
+              "timestamp": "2026-11-09T14:05:12.886"
+            }
+            """;
+
+    public static final String INVALID_CREDENTIALS = """
+            {
+              "title": "Unauthorized",
+              "status": 401,
+              "detail": "Invalid email or password",
+              "instance": "/auth/login",
+              "timestamp": "2026-11-09T14:05:12.886"
+            }
+            """;
+
+    public static final String UNAUTHORIZED = """
+            {
+              "title": "Unauthorized",
+              "status": 401,
+              "detail": "Authentication is required",
+              "instance": "/tasks",
+              "timestamp": "2026-11-09T14:05:12.886"
+            }
+            """;
+
     public static final String INTERNAL_ERROR = """
             {
               "title": "Internal Server Error",
