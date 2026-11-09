@@ -26,11 +26,15 @@ public class OpenApiConfig {
             ## Authentication
 
             1. `POST /auth/register` to create an account.
-            2. `POST /auth/login` to get an `accessToken` (a JWT, valid for 15 minutes).
-            3. Send it on every `/tasks` request as `Authorization: Bearer <accessToken>`. \
-            In Swagger UI, click **Authorize** and paste the token.
+            2. `POST /auth/login` to get an `accessToken` (a JWT, valid for 15 minutes) and a \
+            `refreshToken` (valid for 7 days).
+            3. Send the access token on every `/tasks` request as `Authorization: Bearer <accessToken>`. \
+            In Swagger UI, click **Authorize** and paste it.
+            4. Before it expires, `POST /auth/refresh` with the refresh token to get a new pair. \
+            Each refresh token works once.
+            5. `POST /auth/logout` with the refresh token to end the session.
 
-            A missing, malformed or expired token gets `401` with a `WWW-Authenticate: Bearer` header.
+            A missing, malformed or expired access token gets `401` with a `WWW-Authenticate: Bearer` header.
 
             ## Error responses
 

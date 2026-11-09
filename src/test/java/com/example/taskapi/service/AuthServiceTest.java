@@ -1,11 +1,13 @@
 package com.example.taskapi.service;
 
 import com.example.taskapi.dto.LoginRequest;
+import com.example.taskapi.dto.RefreshTokenRequest;
 import com.example.taskapi.dto.RegisterRequest;
 import com.example.taskapi.dto.TokenResponse;
 import com.example.taskapi.dto.UserResponse;
 import com.example.taskapi.exception.EmailAlreadyRegisteredException;
 import com.example.taskapi.exception.FieldValidationException;
+import com.example.taskapi.exception.InvalidRefreshTokenException;
 import com.example.taskapi.model.User;
 import com.example.taskapi.repository.UserRepository;
 import com.example.taskapi.security.JwtTokenService;
@@ -50,11 +52,15 @@ class AuthServiceTest {
     @Mock
     private JwtTokenService jwtTokenService;
 
+    @Mock
+    private RefreshTokenService refreshTokenService;
+
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userRepository, passwordEncoder, authenticationManager, jwtTokenService);
+        authService = new AuthService(
+                userRepository, passwordEncoder, authenticationManager, jwtTokenService, refreshTokenService);
     }
 
     @Nested
@@ -129,12 +135,13 @@ class AuthServiceTest {
     class Login {
 
         @Test
-        void authenticatesTheLowerCasedEmailAndReturnsAnAccessToken() {
+        void authenticatesTheLowerCasedEmailAndReturnsAccessAndRefreshTokens() {
             Authentication authenticated = UsernamePasswordAuthenticationToken.authenticated(
                     new UserPrincipal(7L, "tanmay@example.com", "$2a$10$hash"), null, List.of());
             when(authenticationManager.authenticate(any())).thenReturn(authenticated);
             when(jwtTokenService.createAccessToken(7L)).thenReturn("access.jwt.token");
             when(jwtTokenService.accessTokenTtlSeconds()).thenReturn(900L);
+            when(refreshTokenService.issue(7L)).thenReturn("refresh-token");
 
             TokenResponse response = authService.login(new LoginRequest(" Tanmay@Example.com", "correct-horse"));
 
@@ -142,7 +149,7 @@ class AuthServiceTest {
             verify(authenticationManager).authenticate(attempt.capture());
             assertThat(attempt.getValue().getName()).isEqualTo("tanmay@example.com");
             assertThat(attempt.getValue().getCredentials()).isEqualTo("correct-horse");
-            assertThat(response).isEqualTo(TokenResponse.bearer("access.jwt.token", 900));
+            assertThat(response).isEqualTo(TokenResponse.bearer("access.jwt.token", "refresh-token", 900));
         }
 
         @Test
@@ -152,6 +159,39 @@ class AuthServiceTest {
             assertThatThrownBy(() -> authService.login(new LoginRequest("tanmay@example.com", "wrong")))
                     .isInstanceOf(BadCredentialsException.class);
             verify(jwtTokenService, never()).createAccessToken(anyLong());
+            verify(refreshTokenService, never()).issue(anyLong());
+        }
+    }
+
+    @Nested
+    class RefreshAndLogout {
+
+        @Test
+        void refreshReturnsANewAccessTokenWithTheRotatedRefreshToken() {
+            when(refreshTokenService.rotate("old-refresh"))
+                    .thenReturn(new RefreshTokenService.Rotation(7L, "new-refresh"));
+            when(jwtTokenService.createAccessToken(7L)).thenReturn("new.access.token");
+            when(jwtTokenService.accessTokenTtlSeconds()).thenReturn(900L);
+
+            TokenResponse response = authService.refresh(new RefreshTokenRequest("old-refresh"));
+
+            assertThat(response).isEqualTo(TokenResponse.bearer("new.access.token", "new-refresh", 900));
+        }
+
+        @Test
+        void refreshWithAnInvalidTokenIssuesNoAccessToken() {
+            when(refreshTokenService.rotate("bad")).thenThrow(new InvalidRefreshTokenException());
+
+            assertThatThrownBy(() -> authService.refresh(new RefreshTokenRequest("bad")))
+                    .isInstanceOf(InvalidRefreshTokenException.class);
+            verify(jwtTokenService, never()).createAccessToken(anyLong());
+        }
+
+        @Test
+        void logoutRevokesTheRefreshToken() {
+            authService.logout(new RefreshTokenRequest("refresh-token"));
+
+            verify(refreshTokenService).revoke("refresh-token");
         }
     }
 }

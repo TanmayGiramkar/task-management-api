@@ -78,6 +78,11 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.UNAUTHORIZED, detail);
     }
 
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ProblemDetail handleInvalidRefreshToken(InvalidRefreshTokenException exception) {
+        return problem(HttpStatus.UNAUTHORIZED, exception.getMessage());
+    }
+
     /** 403, through ProblemDetailsAccessDeniedHandler or method security. */
     @ExceptionHandler(AccessDeniedException.class)
     public ProblemDetail handleAccessDenied(AccessDeniedException exception) {

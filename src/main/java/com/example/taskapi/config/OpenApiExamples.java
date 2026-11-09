@@ -97,6 +97,16 @@ public final class OpenApiExamples {
             }
             """;
 
+    public static final String INVALID_REFRESH_TOKEN = """
+            {
+              "title": "Unauthorized",
+              "status": 401,
+              "detail": "Refresh token is invalid, expired or revoked",
+              "instance": "/auth/refresh",
+              "timestamp": "2026-11-09T14:05:12.886"
+            }
+            """;
+
     public static final String UNAUTHORIZED = """
             {
               "title": "Unauthorized",

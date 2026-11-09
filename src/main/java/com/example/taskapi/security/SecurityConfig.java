@@ -30,7 +30,7 @@ import java.util.Base64;
  * automatically, and this API does not use cookies.
  */
 @Configuration
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, RefreshTokenProperties.class})
 public class SecurityConfig {
 
     /** HS256 needs a key at least as long as its 256-bit output. */

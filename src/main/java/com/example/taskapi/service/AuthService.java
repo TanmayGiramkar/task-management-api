@@ -1,6 +1,7 @@
 package com.example.taskapi.service;
 
 import com.example.taskapi.dto.LoginRequest;
+import com.example.taskapi.dto.RefreshTokenRequest;
 import com.example.taskapi.dto.RegisterRequest;
 import com.example.taskapi.dto.TokenResponse;
 import com.example.taskapi.dto.UserResponse;
@@ -31,15 +32,18 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenService jwtTokenService;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        AuthenticationManager authenticationManager,
-                       JwtTokenService jwtTokenService) {
+                       JwtTokenService jwtTokenService,
+                       RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtTokenService = jwtTokenService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Transactional
@@ -74,8 +78,27 @@ public class AuthService {
                         normalizeEmail(request.email()), request.password()));
 
         UserPrincipal user = (UserPrincipal) authentication.getPrincipal();
+        return tokens(user.id(), refreshTokenService.issue(user.id()));
+    }
+
+    /** Exchanges a refresh token for a new access token and a new refresh token (rotation). */
+    public TokenResponse refresh(RefreshTokenRequest request) {
+        RefreshTokenService.Rotation rotation = refreshTokenService.rotate(request.refreshToken());
+        return tokens(rotation.userId(), rotation.refreshToken());
+    }
+
+    /**
+     * Revokes the refresh token. The current access token stays valid until it expires (at most
+     * 15 minutes): it is checked by signature alone, which is what makes it stateless.
+     */
+    public void logout(RefreshTokenRequest request) {
+        refreshTokenService.revoke(request.refreshToken());
+    }
+
+    private TokenResponse tokens(long userId, String refreshToken) {
         return TokenResponse.bearer(
-                jwtTokenService.createAccessToken(user.id()),
+                jwtTokenService.createAccessToken(userId),
+                refreshToken,
                 jwtTokenService.accessTokenTtlSeconds());
     }
 

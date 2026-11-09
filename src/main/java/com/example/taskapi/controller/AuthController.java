@@ -2,6 +2,7 @@ package com.example.taskapi.controller;
 
 import com.example.taskapi.config.OpenApiExamples;
 import com.example.taskapi.dto.LoginRequest;
+import com.example.taskapi.dto.RefreshTokenRequest;
 import com.example.taskapi.dto.RegisterRequest;
 import com.example.taskapi.dto.TokenResponse;
 import com.example.taskapi.dto.UserResponse;
@@ -56,7 +57,9 @@ public class AuthController {
 
     @PostMapping("/login")
     @Operation(summary = "Log in",
-            description = "Returns an access token (JWT) to send as `Authorization: Bearer <token>`.")
+            description = """
+                    Returns an access token (JWT, 15 minutes) to send as `Authorization: Bearer <token>`, \
+                    and a refresh token (7 days) for getting new tokens without logging in again.""")
     @ApiResponse(responseCode = "200", description = "Logged in")
     @ApiResponse(responseCode = "400", description = "Email or password missing, or the request body is malformed",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
@@ -66,5 +69,37 @@ public class AuthController {
                     examples = @ExampleObject(value = OpenApiExamples.INVALID_CREDENTIALS)))
     public TokenResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/refresh")
+    @Operation(summary = "Get new tokens",
+            description = """
+                    Exchanges a refresh token for a new access token and a new refresh token. \
+                    The refresh token sent is revoked: each one works once. Sending an already-used \
+                    refresh token is treated as theft and logs out every session from that login.""")
+    @ApiResponse(responseCode = "200", description = "New tokens")
+    @ApiResponse(responseCode = "400", description = "Refresh token missing, or the request body is malformed",
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
+                    examples = @ExampleObject(value = OpenApiExamples.MALFORMED_BODY)))
+    @ApiResponse(responseCode = "401", description = "Refresh token unknown, expired or revoked",
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
+                    examples = @ExampleObject(value = OpenApiExamples.INVALID_REFRESH_TOKEN)))
+    public TokenResponse refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        return authService.refresh(request);
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Log out",
+            description = """
+                    Revokes the refresh token. Always returns 204, even for an unknown token. \
+                    The access token keeps working until it expires (at most 15 minutes), so the client \
+                    should discard it.""")
+    @ApiResponse(responseCode = "204", description = "Logged out. No response body")
+    @ApiResponse(responseCode = "400", description = "Refresh token missing, or the request body is malformed",
+            content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
+                    examples = @ExampleObject(value = OpenApiExamples.MALFORMED_BODY)))
+    public void logout(@Valid @RequestBody RefreshTokenRequest request) {
+        authService.logout(request);
     }
 }

@@ -72,8 +72,11 @@ class OpenApiDocumentationIT {
                 .andExpect(jsonPath("$.paths['/auth/register'].post.responses['401']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/auth/login'].post.responses['200']").exists())
                 .andExpect(jsonPath("$.paths['/auth/login'].post.responses['401']").exists())
-                // 6 task operations + 2 auth operations
-                .andExpect(jsonPath("$.paths.*.*.responses['500']", hasSize(8)))
+                .andExpect(jsonPath("$.paths['/auth/refresh'].post.responses['401']").exists())
+                .andExpect(jsonPath("$.paths['/auth/logout'].post.responses['204']").exists())
+                .andExpect(jsonPath("$.paths['/auth/logout'].post.responses['401']").doesNotExist())
+                // 6 task operations + 4 auth operations
+                .andExpect(jsonPath("$.paths.*.*.responses['500']", hasSize(10)))
                 .andExpect(jsonPath("$.paths.*.*.responses['405']").doesNotExist());
     }
 
@@ -89,7 +92,9 @@ class OpenApiDocumentationIT {
                 .andExpect(jsonPath("$.paths['/tasks/{id}'].*.responses['401']", hasSize(4)))
                 // An empty security list overrides the global requirement: no token needed
                 .andExpect(jsonPath("$.paths['/auth/register'].post.security", hasSize(0)))
-                .andExpect(jsonPath("$.paths['/auth/login'].post.security", hasSize(0)));
+                .andExpect(jsonPath("$.paths['/auth/login'].post.security", hasSize(0)))
+                .andExpect(jsonPath("$.paths['/auth/refresh'].post.security", hasSize(0)))
+                .andExpect(jsonPath("$.paths['/auth/logout'].post.security", hasSize(0)));
     }
 
     @Test

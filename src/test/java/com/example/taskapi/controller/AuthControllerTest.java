@@ -1,11 +1,13 @@
 package com.example.taskapi.controller;
 
 import com.example.taskapi.dto.LoginRequest;
+import com.example.taskapi.dto.RefreshTokenRequest;
 import com.example.taskapi.dto.RegisterRequest;
 import com.example.taskapi.dto.TokenResponse;
 import com.example.taskapi.dto.UserResponse;
 import com.example.taskapi.exception.EmailAlreadyRegisteredException;
 import com.example.taskapi.exception.FieldValidationException;
+import com.example.taskapi.exception.InvalidRefreshTokenException;
 import com.example.taskapi.security.SecurityConfig;
 import com.example.taskapi.service.AuthService;
 import org.junit.jupiter.api.Nested;
@@ -131,15 +133,16 @@ class AuthControllerTest {
     class Login {
 
         @Test
-        void returnsABearerTokenAndNeedsNoToken() throws Exception {
+        void returnsBearerTokensAndNeedsNoToken() throws Exception {
             when(authService.login(new LoginRequest("tanmay@example.com", "correct-horse")))
-                    .thenReturn(TokenResponse.bearer("header.payload.signature", 900));
+                    .thenReturn(TokenResponse.bearer("header.payload.signature", "refresh-token", 900));
 
             postJson("/auth/login", """
                     {"email": "tanmay@example.com", "password": "correct-horse"}
                     """)
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.accessToken").value("header.payload.signature"))
+                    .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
                     .andExpect(jsonPath("$.tokenType").value("Bearer"))
                     .andExpect(jsonPath("$.expiresIn").value(900));
         }
@@ -167,6 +170,54 @@ class AuthControllerTest {
                     .andExpect(jsonPath("$.detail").value("Invalid email or password"))
                     .andExpect(jsonPath("$.instance").value("/auth/login"));
             verify(authService).login(new LoginRequest("tanmay@example.com", "wrong-password"));
+        }
+    }
+
+    @Nested
+    class RefreshAndLogout {
+
+        @Test
+        void refreshReturnsNewTokensAndNeedsNoAccessToken() throws Exception {
+            when(authService.refresh(new RefreshTokenRequest("old-refresh")))
+                    .thenReturn(TokenResponse.bearer("new.access.token", "new-refresh", 900));
+
+            postJson("/auth/refresh", """
+                    {"refreshToken": "old-refresh"}
+                    """)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.accessToken").value("new.access.token"))
+                    .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
+        }
+
+        @Test
+        void refreshReturns401ProblemForAnInvalidToken() throws Exception {
+            when(authService.refresh(any(RefreshTokenRequest.class))).thenThrow(new InvalidRefreshTokenException());
+
+            postJson("/auth/refresh", """
+                    {"refreshToken": "revoked"}
+                    """)
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.detail").value("Refresh token is invalid, expired or revoked"))
+                    .andExpect(jsonPath("$.instance").value("/auth/refresh"));
+        }
+
+        @Test
+        void refreshRejectsAMissingToken() throws Exception {
+            postJson("/auth/refresh", "{}")
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors.refreshToken").value("Refresh token is required"));
+            verifyNoInteractions(authService);
+        }
+
+        @Test
+        void logoutReturns204WithNoBody() throws Exception {
+            postJson("/auth/logout", """
+                    {"refreshToken": "refresh-token"}
+                    """)
+                    .andExpect(status().isNoContent())
+                    .andExpect(content().string(""));
+            verify(authService).logout(new RefreshTokenRequest("refresh-token"));
         }
     }
 }
