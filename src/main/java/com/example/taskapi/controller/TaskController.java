@@ -11,6 +11,8 @@ import com.example.taskapi.dto.PageResponse;
 import com.example.taskapi.dto.TaskPatchRequest;
 import com.example.taskapi.config.OpenApiExamples;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -23,7 +25,7 @@ import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON_VALUE;
 
 @RestController
 @RequestMapping("/tasks")
-@Tag(name = "Tasks", description = "Create, read, update and delete tasks")
+@Tag(name = "Tasks", description = "Create, read, update and delete your own tasks. Other users' tasks are never visible")
 @ApiResponse(responseCode = "401", description = "Missing, invalid or expired access token",
         content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                 examples = @ExampleObject(value = OpenApiExamples.UNAUTHORIZED)))
@@ -51,14 +53,15 @@ public class TaskController {
                             @ExampleObject(name = "Malformed body",
                                     value = OpenApiExamples.MALFORMED_BODY)
                     }))
-    public TaskResponse createTask(@Valid @RequestBody TaskRequest request) {
-        return taskService.createTask(request);
+    public TaskResponse createTask(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                                   @Valid @RequestBody TaskRequest request) {
+        return taskService.createTask(currentUserId(jwt), request);
     }
 
     @GetMapping
     @Operation(summary = "List tasks",
             description = """
-                    Returns one page of tasks. Filter by `status`, search the title and description with `search`, \
+                    Returns one page of your tasks. Filter by `status`, search the title and description with `search`, \
                     and order with `sortBy` and `direction`. Tasks with equal sort values are ordered by `id`, \
                     so pages are stable. The maximum page size is 50.""")
     @ApiResponse(responseCode = "200", description = "One page of tasks")
@@ -71,6 +74,7 @@ public class TaskController {
                                     value = OpenApiExamples.INVALID_STATUS)
                     }))
     public PageResponse<TaskResponse> getAllTasks(
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "Return only tasks with this status")
             @RequestParam(required = false) TaskStatus status,
             @Parameter(description = "Case-insensitive text to find in the title or description", example = "report")
@@ -88,7 +92,7 @@ public class TaskController {
                     schema = @Schema(type = "integer", format = "int32", minimum = "1", maximum = "50", defaultValue = "10"))
             @RequestParam(defaultValue = "10") int size) {
 
-        return taskService.getAllTasks(status, search, sortBy, direction, page, size);
+        return taskService.getAllTasks(currentUserId(jwt), status, search, sortBy, direction, page, size);
     }
 
     @GetMapping("/{id}")
@@ -97,11 +101,12 @@ public class TaskController {
     @ApiResponse(responseCode = "400", description = "The id is not a number",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.INVALID_ID)))
-    @ApiResponse(responseCode = "404", description = "No task with this id",
+    @ApiResponse(responseCode = "404", description = "You have no task with this id. Another user's task also gives 404",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.TASK_NOT_FOUND)))
-    public TaskResponse getTaskById(@Parameter(description = "Task id", example = "10") @PathVariable Long id) {
-        return taskService.getTaskById(id);
+    public TaskResponse getTaskById(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                                    @Parameter(description = "Task id", example = "10") @PathVariable Long id) {
+        return taskService.getTaskById(currentUserId(jwt), id);
     }
 
     @PutMapping("/{id}")
@@ -122,14 +127,15 @@ public class TaskController {
                             @ExampleObject(name = "Invalid id",
                                     value = OpenApiExamples.INVALID_ID)
                     }))
-    @ApiResponse(responseCode = "404", description = "No task with this id",
+    @ApiResponse(responseCode = "404", description = "You have no task with this id. Another user's task also gives 404",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.TASK_NOT_FOUND)))
     public TaskResponse updateTask(
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "Task id", example = "10") @PathVariable Long id,
             @Valid @RequestBody TaskRequest request) {
 
-        return taskService.updateTask(id, request);
+        return taskService.updateTask(currentUserId(jwt), id, request);
     }
 
     @PatchMapping("/{id}")
@@ -148,14 +154,15 @@ public class TaskController {
                             @ExampleObject(name = "Invalid id",
                                     value = OpenApiExamples.INVALID_ID)
                     }))
-    @ApiResponse(responseCode = "404", description = "No task with this id",
+    @ApiResponse(responseCode = "404", description = "You have no task with this id. Another user's task also gives 404",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.TASK_NOT_FOUND)))
     public TaskResponse patchTask(
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "Task id", example = "10") @PathVariable Long id,
             @Valid @RequestBody TaskPatchRequest request) {
 
-        return taskService.patchTask(id, request);
+        return taskService.patchTask(currentUserId(jwt), id, request);
     }
 
     @DeleteMapping("/{id}")
@@ -165,10 +172,16 @@ public class TaskController {
     @ApiResponse(responseCode = "400", description = "The id is not a number",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.INVALID_ID)))
-    @ApiResponse(responseCode = "404", description = "No task with this id",
+    @ApiResponse(responseCode = "404", description = "You have no task with this id. Another user's task also gives 404",
             content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = ProblemDetail.class),
                     examples = @ExampleObject(value = OpenApiExamples.TASK_NOT_FOUND)))
-    public void deleteTask(@Parameter(description = "Task id", example = "10") @PathVariable Long id) {
-        taskService.deleteTask(id);
+    public void deleteTask(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                           @Parameter(description = "Task id", example = "10") @PathVariable Long id) {
+        taskService.deleteTask(currentUserId(jwt), id);
+    }
+
+    /** The access token's subject is the user id (see JwtTokenService). */
+    private static long currentUserId(Jwt jwt) {
+        return Long.parseLong(jwt.getSubject());
     }
 }

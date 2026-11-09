@@ -67,6 +67,9 @@ class TaskControllerTest {
     private static final LocalDateTime TIME = LocalDateTime.of(2026, 11, 7, 10, 30, 15);
     private static final String TIME_JSON = "2026-11-07T10:30:15";
 
+    /** The user id in the test token; the controller must pass it to every service call. */
+    private static final long USER_ID = 7L;
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -77,9 +80,9 @@ class TaskControllerTest {
         return new TaskResponse(id, title, description, status, TIME, TIME);
     }
 
-    /** Sends the request as an authenticated user. */
+    /** Sends the request as an authenticated user whose token subject is {@link #USER_ID}. */
     private ResultActions perform(MockHttpServletRequestBuilder request) throws Exception {
-        return mockMvc.perform(request.with(jwt().jwt(token -> token.subject("1"))));
+        return mockMvc.perform(request.with(jwt().jwt(token -> token.subject(String.valueOf(USER_ID)))));
     }
 
     private ResultActions sendJson(MockHttpServletRequestBuilder request, String json) throws Exception {
@@ -105,7 +108,7 @@ class TaskControllerTest {
 
         @Test
         void returns201WithTheCreatedTask() throws Exception {
-            when(taskService.createTask(any(TaskRequest.class)))
+            when(taskService.createTask(eq(USER_ID), any(TaskRequest.class)))
                     .thenReturn(task(10L, "Write report", "First draft", TaskStatus.TODO));
 
             sendJson(post("/tasks"), """
@@ -120,7 +123,7 @@ class TaskControllerTest {
                     .andExpect(jsonPath("$.updatedAt").value(TIME_JSON));
 
             ArgumentCaptor<TaskRequest> request = ArgumentCaptor.forClass(TaskRequest.class);
-            verify(taskService).createTask(request.capture());
+            verify(taskService).createTask(eq(USER_ID), request.capture());
             assertThat(request.getValue().getTitle()).isEqualTo("Write report");
             assertThat(request.getValue().getDescription()).isEqualTo("First draft");
             assertThat(request.getValue().getStatus()).isNull();
@@ -128,7 +131,7 @@ class TaskControllerTest {
 
         @Test
         void acceptsTitleOfExactly100Characters() throws Exception {
-            when(taskService.createTask(any(TaskRequest.class)))
+            when(taskService.createTask(eq(USER_ID), any(TaskRequest.class)))
                     .thenReturn(task(10L, "a".repeat(100), null, TaskStatus.TODO));
 
             sendJson(post("/tasks"), "{\"title\": \"" + "a".repeat(100) + "\"}")
@@ -198,7 +201,7 @@ class TaskControllerTest {
 
         @Test
         void returnsOnePageAndPassesDefaultsToTheService() throws Exception {
-            when(taskService.getAllTasks(null, null, null, "asc", 0, 10)).thenReturn(onePage);
+            when(taskService.getAllTasks(USER_ID, null, null, null, "asc", 0, 10)).thenReturn(onePage);
 
             perform(get("/tasks"))
                     .andExpect(status().isOk())
@@ -214,7 +217,7 @@ class TaskControllerTest {
 
         @Test
         void passesEveryQueryParameterToTheService() throws Exception {
-            when(taskService.getAllTasks(TaskStatus.IN_PROGRESS, "report", "title", "desc", 2, 5))
+            when(taskService.getAllTasks(USER_ID, TaskStatus.IN_PROGRESS, "report", "title", "desc", 2, 5))
                     .thenReturn(onePage);
 
             perform(get("/tasks")
@@ -226,7 +229,7 @@ class TaskControllerTest {
                             .param("size", "5"))
                     .andExpect(status().isOk());
 
-            verify(taskService).getAllTasks(TaskStatus.IN_PROGRESS, "report", "title", "desc", 2, 5);
+            verify(taskService).getAllTasks(USER_ID, TaskStatus.IN_PROGRESS, "report", "title", "desc", 2, 5);
         }
 
         @Test
@@ -248,7 +251,7 @@ class TaskControllerTest {
 
         @Test
         void returns400WhenTheServiceRejectsAQueryParameter() throws Exception {
-            when(taskService.getAllTasks(null, null, null, "asc", 0, 51))
+            when(taskService.getAllTasks(USER_ID, null, null, null, "asc", 0, 51))
                     .thenThrow(new InvalidQueryParameterException("Page size must be between 1 and 50"));
 
             ResultActions result = perform(get("/tasks").param("size", "51"));
@@ -262,7 +265,7 @@ class TaskControllerTest {
 
         @Test
         void returnsTheTask() throws Exception {
-            when(taskService.getTaskById(10L)).thenReturn(task(10L, "Write report", null, TaskStatus.TODO));
+            when(taskService.getTaskById(USER_ID, 10L)).thenReturn(task(10L, "Write report", null, TaskStatus.TODO));
 
             perform(get("/tasks/10"))
                     .andExpect(status().isOk())
@@ -273,7 +276,7 @@ class TaskControllerTest {
 
         @Test
         void returns404ForUnknownId() throws Exception {
-            when(taskService.getTaskById(42L)).thenThrow(new TaskNotFoundException("Task not found with id: 42"));
+            when(taskService.getTaskById(USER_ID, 42L)).thenThrow(new TaskNotFoundException("Task not found with id: 42"));
 
             expectProblem(perform(get("/tasks/42")), 404, "Task not found with id: 42");
         }
@@ -290,7 +293,7 @@ class TaskControllerTest {
 
         @Test
         void returnsTheReplacedTask() throws Exception {
-            when(taskService.updateTask(eq(10L), any(TaskRequest.class)))
+            when(taskService.updateTask(eq(USER_ID), eq(10L), any(TaskRequest.class)))
                     .thenReturn(task(10L, "New title", null, TaskStatus.COMPLETED));
 
             sendJson(put("/tasks/10"), """
@@ -301,7 +304,7 @@ class TaskControllerTest {
                     .andExpect(jsonPath("$.status").value("COMPLETED"));
 
             ArgumentCaptor<TaskRequest> request = ArgumentCaptor.forClass(TaskRequest.class);
-            verify(taskService).updateTask(eq(10L), request.capture());
+            verify(taskService).updateTask(eq(USER_ID), eq(10L), request.capture());
             assertThat(request.getValue().getTitle()).isEqualTo("New title");
             assertThat(request.getValue().getDescription()).isNull();
             assertThat(request.getValue().getStatus()).isEqualTo(TaskStatus.COMPLETED);
@@ -317,7 +320,7 @@ class TaskControllerTest {
 
         @Test
         void returns404ForUnknownId() throws Exception {
-            when(taskService.updateTask(eq(42L), any(TaskRequest.class)))
+            when(taskService.updateTask(eq(USER_ID), eq(42L), any(TaskRequest.class)))
                     .thenThrow(new TaskNotFoundException("Task not found with id: 42"));
 
             expectProblem(sendJson(put("/tasks/42"), """
@@ -331,7 +334,7 @@ class TaskControllerTest {
 
         @Test
         void passesOnlyTheSentFieldsToTheService() throws Exception {
-            when(taskService.patchTask(10L, new TaskPatchRequest(null, null, TaskStatus.COMPLETED)))
+            when(taskService.patchTask(USER_ID, 10L, new TaskPatchRequest(null, null, TaskStatus.COMPLETED)))
                     .thenReturn(task(10L, "Write report", null, TaskStatus.COMPLETED));
 
             sendJson(patch("/tasks/10"), """
@@ -340,12 +343,12 @@ class TaskControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("COMPLETED"));
 
-            verify(taskService).patchTask(10L, new TaskPatchRequest(null, null, TaskStatus.COMPLETED));
+            verify(taskService).patchTask(USER_ID, 10L, new TaskPatchRequest(null, null, TaskStatus.COMPLETED));
         }
 
         @Test
         void acceptsAnEmptyBody() throws Exception {
-            when(taskService.patchTask(10L, new TaskPatchRequest(null, null, null)))
+            when(taskService.patchTask(USER_ID, 10L, new TaskPatchRequest(null, null, null)))
                     .thenReturn(task(10L, "Write report", null, TaskStatus.TODO));
 
             sendJson(patch("/tasks/10"), "{}").andExpect(status().isOk());
@@ -372,7 +375,7 @@ class TaskControllerTest {
 
         @Test
         void returns404ForUnknownId() throws Exception {
-            when(taskService.patchTask(eq(42L), any(TaskPatchRequest.class)))
+            when(taskService.patchTask(eq(USER_ID), eq(42L), any(TaskPatchRequest.class)))
                     .thenThrow(new TaskNotFoundException("Task not found with id: 42"));
 
             expectProblem(sendJson(patch("/tasks/42"), "{}"), 404, "Task not found with id: 42");
@@ -388,13 +391,13 @@ class TaskControllerTest {
                     .andExpect(status().isNoContent())
                     .andExpect(content().string(""));
 
-            verify(taskService).deleteTask(10L);
+            verify(taskService).deleteTask(USER_ID, 10L);
         }
 
         @Test
         void returns404ForUnknownId() throws Exception {
             doThrow(new TaskNotFoundException("Task not found with id: 42"))
-                    .when(taskService).deleteTask(42L);
+                    .when(taskService).deleteTask(USER_ID, 42L);
 
             expectProblem(perform(delete("/tasks/42")), 404, "Task not found with id: 42");
         }
@@ -417,7 +420,7 @@ class TaskControllerTest {
 
         @Test
         void returns500WithoutLeakingExceptionDetails() throws Exception {
-            when(taskService.getTaskById(10L))
+            when(taskService.getTaskById(USER_ID, 10L))
                     .thenThrow(new IllegalStateException("Connection refused: internal-db-host:5432"));
 
             ResultActions result = perform(get("/tasks/10"));
@@ -459,7 +462,7 @@ class TaskControllerTest {
         @Test
         void returns403ProblemWhenAccessIsDenied() throws Exception {
             // No endpoint denies access yet (roles come in Stage 5); this checks the 403 format is ready
-            when(taskService.getTaskById(10L)).thenThrow(new AccessDeniedException("denied"));
+            when(taskService.getTaskById(USER_ID, 10L)).thenThrow(new AccessDeniedException("denied"));
 
             expectProblem(perform(get("/tasks/10")), 403, "You do not have permission to perform this action");
         }

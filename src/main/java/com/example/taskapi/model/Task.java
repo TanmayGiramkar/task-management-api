@@ -29,10 +29,17 @@ public class Task {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    // LAZY: responses never include the owner, and owner checks compare the foreign key, so the user
+    // row is not loaded. Nullable only because of tasks created before Stage 4 (see V5).
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id")
+    private User owner;
+
     public Task() {
     }
 
-    public Task(String title, String description, TaskStatus status) {
+    public Task(User owner, String title, String description, TaskStatus status) {
+        this.owner = owner;
         this.title = title;
         this.description = description;
         this.status = status;
@@ -97,5 +104,9 @@ public class Task {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public User getOwner() {
+        return owner;
     }
 }

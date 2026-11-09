@@ -8,6 +8,7 @@ import com.example.taskapi.exception.TaskNotFoundException;
 import com.example.taskapi.model.Task;
 import com.example.taskapi.model.TaskStatus;
 import com.example.taskapi.repository.TaskRepository;
+import com.example.taskapi.repository.UserRepository;
 import com.example.taskapi.specification.TaskSpecifications;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,14 +28,22 @@ public class TaskService {
     private static final int MAX_PAGE_SIZE = 50;
 
     private final TaskRepository taskRepository;
+    private final UserRepository userRepository;
 
-    public TaskService(TaskRepository taskRepository) {
+    public TaskService(TaskRepository taskRepository, UserRepository userRepository) {
         this.taskRepository = taskRepository;
+        this.userRepository = userRepository;
     }
 
-    public TaskResponse createTask(TaskRequest request) {
+    /**
+     * Every method takes the id of the logged-in user (from the access token) and only ever reads or
+     * changes that user's tasks.
+     */
+    public TaskResponse createTask(long ownerId, TaskRequest request) {
 
+        // getReferenceById gives a proxy for the foreign key without querying the users table
         Task task = new Task(
+                userRepository.getReferenceById(ownerId),
                 request.getTitle(),
                 request.getDescription(),
                 request.getStatus()
@@ -46,6 +55,7 @@ public class TaskService {
     }
 
     public PageResponse<TaskResponse> getAllTasks(
+            long ownerId,
             TaskStatus status,
             String search,
             String sortBy,
@@ -85,7 +95,8 @@ public class TaskService {
             sort = sort.and(Sort.by(Sort.Direction.ASC, "id"));
         }
 
-        Specification<Task> spec = TaskSpecifications.hasStatus(status)
+        Specification<Task> spec = TaskSpecifications.ownedBy(ownerId)
+                .and(TaskSpecifications.hasStatus(status))
                 .and(TaskSpecifications.matchesSearch(search));
 
         Pageable pageable = PageRequest.of(page, size, sort);
@@ -96,22 +107,14 @@ public class TaskService {
         return PageResponse.from(result);
     }
 
-    public TaskResponse getTaskById(Long id) {
+    public TaskResponse getTaskById(long ownerId, Long id) {
 
-        Task task = taskRepository.findById(id)
-                .orElseThrow(() -> new TaskNotFoundException(
-                        "Task not found with id: " + id
-                ));
-
-        return toResponse(task);
+        return toResponse(findOwnedTask(ownerId, id));
     }
 
-    public TaskResponse updateTask(Long id, TaskRequest request) {
+    public TaskResponse updateTask(long ownerId, Long id, TaskRequest request) {
 
-        Task task = taskRepository.findById(id)
-                .orElseThrow(() -> new TaskNotFoundException(
-                        "Task not found with id: " + id
-                ));
+        Task task = findOwnedTask(ownerId, id);
 
         task.setTitle(request.getTitle());
         task.setDescription(request.getDescription());
@@ -125,12 +128,9 @@ public class TaskService {
         return toResponse(updatedTask);
     }
 
-    public TaskResponse patchTask(Long id, TaskPatchRequest request) {
+    public TaskResponse patchTask(long ownerId, Long id, TaskPatchRequest request) {
 
-        Task task = taskRepository.findById(id)
-                .orElseThrow(() -> new TaskNotFoundException(
-                        "Task not found with id: " + id
-                ));
+        Task task = findOwnedTask(ownerId, id);
 
         if (request.title() != null) {
             task.setTitle(request.title());
@@ -149,14 +149,20 @@ public class TaskService {
         return toResponse(updatedTask);
     }
 
-    public void deleteTask(Long id) {
+    public void deleteTask(long ownerId, Long id) {
 
-        Task task = taskRepository.findById(id)
+        taskRepository.delete(findOwnedTask(ownerId, id));
+    }
+
+    /**
+     * Another user's task gets the same 404 and message as a task that does not exist (404, not 403),
+     * so ids of other users' tasks cannot be discovered.
+     */
+    private Task findOwnedTask(long ownerId, Long id) {
+        return taskRepository.findByIdAndOwnerId(id, ownerId)
                 .orElseThrow(() -> new TaskNotFoundException(
                         "Task not found with id: " + id
                 ));
-
-        taskRepository.delete(task);
     }
 
     private TaskResponse toResponse(Task task) {

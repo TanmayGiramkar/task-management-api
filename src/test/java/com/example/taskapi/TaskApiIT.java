@@ -57,7 +57,8 @@ class TaskApiIT {
     @Autowired
     private JwtTokenService jwtTokenService;
 
-    /** "Bearer <token>" for this test's user. */
+    /** This test's user, and "Bearer <token>" for it. */
+    private User user;
     private String authorization;
 
     @BeforeEach
@@ -68,7 +69,7 @@ class TaskApiIT {
 
         // Created directly and given a token from the app's own token service: the login flow itself
         // is tested in AuthenticationIT, so these tests do not depend on it
-        User user = userRepository.save(new User("api-test@example.com", "not-used-by-these-tests"));
+        user = userRepository.save(new User("api-test@example.com", "not-used-by-these-tests"));
         authorization = "Bearer " + jwtTokenService.createAccessToken(user.getId());
     }
 
@@ -234,13 +235,13 @@ class TaskApiIT {
                 .andExpect(jsonPath("$.last").value(true));
     }
 
-    /** Saved in this order, so ids increase in this order. */
+    /** Saved in this order, so ids increase in this order. All owned by this test's user. */
     private void saveFiveTasks() {
         taskRepository.saveAll(List.of(
-                new Task("Write project report", "Summarise the Stage 2 changes", TaskStatus.TODO),
-                new Task("Review pull request", "Check the report format", TaskStatus.IN_PROGRESS),
-                new Task("Buy groceries", null, TaskStatus.COMPLETED),
-                new Task("Plan sprint", "Discuss the roadmap", TaskStatus.TODO),
-                new Task("Fix login bug", null, TaskStatus.TODO)));
+                new Task(user, "Write project report", "Summarise the Stage 2 changes", TaskStatus.TODO),
+                new Task(user, "Review pull request", "Check the report format", TaskStatus.IN_PROGRESS),
+                new Task(user, "Buy groceries", null, TaskStatus.COMPLETED),
+                new Task(user, "Plan sprint", "Discuss the roadmap", TaskStatus.TODO),
+                new Task(user, "Fix login bug", null, TaskStatus.TODO)));
     }
 }

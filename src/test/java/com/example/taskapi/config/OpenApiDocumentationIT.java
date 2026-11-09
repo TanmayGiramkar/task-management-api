@@ -90,6 +90,8 @@ class OpenApiDocumentationIT {
                 // Every task operation documents the 401 it returns without a valid token
                 .andExpect(jsonPath("$.paths['/tasks'].*.responses['401']", hasSize(2)))
                 .andExpect(jsonPath("$.paths['/tasks/{id}'].*.responses['401']", hasSize(4)))
+                // The user comes from the token: the controller's Jwt parameter is not an API parameter
+                .andExpect(jsonPath("$.paths.*.*.parameters[?(@.name == 'jwt')]", hasSize(0)))
                 // An empty security list overrides the global requirement: no token needed
                 .andExpect(jsonPath("$.paths['/auth/register'].post.security", hasSize(0)))
                 .andExpect(jsonPath("$.paths['/auth/login'].post.security", hasSize(0)))

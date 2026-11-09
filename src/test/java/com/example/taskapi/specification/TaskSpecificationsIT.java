@@ -3,7 +3,9 @@ package com.example.taskapi.specification;
 import com.example.taskapi.TestcontainersConfiguration;
 import com.example.taskapi.model.Task;
 import com.example.taskapi.model.TaskStatus;
+import com.example.taskapi.model.User;
 import com.example.taskapi.repository.TaskRepository;
+import com.example.taskapi.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -30,17 +32,54 @@ class TaskSpecificationsIT {
     @Autowired
     private TaskRepository taskRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    private User owner;
+    private User otherUser;
+
     @BeforeEach
     void saveTasks() {
+        owner = userRepository.save(new User("owner@example.com", "not-used"));
+        otherUser = userRepository.save(new User("other@example.com", "not-used"));
         taskRepository.saveAll(List.of(
-                new Task("Write project report", "Summarise the Stage 2 changes", TaskStatus.TODO),
-                new Task("Review pull request", "Check the REPORT format", TaskStatus.IN_PROGRESS),
-                new Task("Buy groceries", null, TaskStatus.COMPLETED),
-                new Task("Plan sprint", "Discuss the roadmap", TaskStatus.TODO)));
+                new Task(owner, "Write project report", "Summarise the Stage 2 changes", TaskStatus.TODO),
+                new Task(owner, "Review pull request", "Check the REPORT format", TaskStatus.IN_PROGRESS),
+                new Task(owner, "Buy groceries", null, TaskStatus.COMPLETED),
+                new Task(owner, "Plan sprint", "Discuss the roadmap", TaskStatus.TODO)));
     }
 
     private List<String> titlesMatching(Specification<Task> spec) {
         return taskRepository.findAll(spec).stream().map(Task::getTitle).toList();
+    }
+
+    @Test
+    void ownedByMatchesOnlyThatUsersTasks() {
+        taskRepository.save(new Task(otherUser, "Other user's report", null, TaskStatus.TODO));
+
+        assertThat(titlesMatching(TaskSpecifications.ownedBy(owner.getId()))).hasSize(4)
+                .doesNotContain("Other user's report");
+        assertThat(titlesMatching(TaskSpecifications.ownedBy(otherUser.getId())))
+                .containsExactly("Other user's report");
+    }
+
+    @Test
+    void ownedByNeverMatchesTasksWithoutAnOwner() {
+        // Tasks created before Stage 4 have no owner (V5) and must be invisible to every user
+        taskRepository.save(new Task(null, "Legacy task", null, TaskStatus.TODO));
+
+        assertThat(titlesMatching(TaskSpecifications.ownedBy(owner.getId()))).doesNotContain("Legacy task");
+        assertThat(titlesMatching(TaskSpecifications.ownedBy(otherUser.getId()))).isEmpty();
+    }
+
+    @Test
+    void ownerFilterCombinesWithSearch() {
+        taskRepository.save(new Task(otherUser, "Other user's report", null, TaskStatus.TODO));
+
+        Specification<Task> spec = TaskSpecifications.ownedBy(otherUser.getId())
+                .and(TaskSpecifications.matchesSearch("report"));
+
+        assertThat(titlesMatching(spec)).containsExactly("Other user's report");
     }
 
     @Test
